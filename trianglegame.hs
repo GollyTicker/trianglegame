@@ -1,5 +1,5 @@
-import Test.HUnit
-import Data.Map.Strict (Map, fromList, insert)
+import Test.HUnit hiding (test)
+import Data.Map.Strict (Map, fromList, insert, size, mapWithKey)
 
 -- (<<) is a infix short of map -- should have a low precedence
 infixr 5 <<
@@ -37,8 +37,8 @@ infixr 9 .:
 
 -- ================================================================
 
-tests :: IO ()
-tests = do
+test :: IO ()
+test = do
         putStrLn ">> HUnit tests..."
         counts <- runTestTT $ TestList unitsProblemTests
         if failures counts /= 0
@@ -52,7 +52,9 @@ unitsProblemTests = [
 ;
 
 testBoard = [
-               assertEqual "" 0 0
+               assertEqual "opposingPos1" (5,3) $ opposingPos 6 4 (2,1),
+               assertEqual "opposingPos2" (3,2) $ opposingPos 6 4 (0,0),
+               assertEqual "boardSize" (6*4) $ size $ mkClearFields 6 4
             ]
 ;
 
@@ -65,10 +67,9 @@ main = do
         n1 <- getLine
         putStrLn "Second Player Name:"
         n2 <- getLine
-        putStrLn "How to enter moves:"
-        putStrLn "Enter Moves as (Player1Move, Player2Move)"
-        putStrLn "e.g. (R, V)"
-        putStrLn "Moves can be to the left (L), right(R) or vertically (V)."
+        putStrLn ">> Enter moves as (Player1Move, Player2Move)"
+        putStrLn ">> e.g. (R, V)"
+        putStrLn ">> Moves can be to the left (L), right(R) or vertically (V)."
         putStrLn "Game starts now!"
         let board = mkBoard 6 4 n1 n2
         stats <- playGame board
@@ -77,15 +78,13 @@ main = do
 
 playGame :: Board -> IO Stats
 playGame board = do
-            putStrLn $ "Turn " ++ show (turnCount board) ++ " - enter your moves."
+            putStrLn $ "Turn " ++ show (turnCount board) ++ " - enter your moves:"
             unsafeMoves <- getLine
             let moves :: (Move, Move)
                 moves = read unsafeMoves
                 (maybeStats, newBoard, p1Action, p2Action) = playMove board moves
-            putStrLn $ show (playerA board) ++ ":"
-            print p1Action
-            putStrLn $ show (playerB board) ++ ":"
-            print p2Action
+            putStrLn $ show (playerA board) ++ " " ++ show p1Action
+            putStrLn $ show (playerB board) ++ " " ++ show p2Action
             putStrLn "Board:"
             putStrLn $ prettyShow newBoard
             case maybeStats of
@@ -93,11 +92,11 @@ playGame board = do
                         Just stats -> return stats
 ;
 
-type Pos = (Int, Int)
+type Pos = (Int, Int)       -- zero-based indices
 type Fields = Map (Int, Int) Occupacy
 
 data Board = Board {
-                width :: Int,
+                width :: Int,   -- widht and height say the number of horizontal/vertical fields
                 height :: Int,
                 playerA :: Player,
                 playerB :: Player,
@@ -109,7 +108,6 @@ data Board = Board {
 data Player = Player {
                     pos :: Pos,
                     name :: String
-                    -- more ....
               } deriving (Show, Eq)
 ;
 
@@ -118,21 +116,41 @@ data Stats = Stats {
                     loser :: Player
                 } deriving Show
 
-data Occupacy = A | B | Neutral deriving (Show, Eq)
+data Occupacy = A | B | N deriving (Show, Eq)
 
 data Move = L | R | V deriving (Show, Eq, Read)
 
-data PlayerAction = Attack { stage :: Int, from :: Player, fromField :: Pos, toField :: Pos} |
-                    MoveIntoFreindly { from :: Player, fromField :: Pos, toField :: Pos}     |
-                    MoveIntoNeutral { stage :: Int, from :: Player, fromField :: Pos, toField :: Pos} deriving Show
+data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
+                    MoveIntoFriendly { fromField :: Pos, toField :: Pos}     |
+                    MoveIntoNeutral { stage :: Int, fromField :: Pos, toField :: Pos} deriving Show
 ;
+-- TODO, better printing
 
 
 prettyShow :: Board -> String
-prettyShow = show   -- TODO
+prettyShow = toStringAndcombine . combineShowfields . fieldsToInterMedShowfield   -- TODO
+
+fieldsToInterMedShowfield :: Board -> [(Pos, Occupacy)]
+fieldsToInterMedShowfield board = addPlayers board . mapWithKey toIntermedShowfield . fields $ board
+
+toIntermedShowfield :: Pos -> Occupacy -> (Pos, Occupacy)
+toIntermedShowfield p c = (p, c)
+
+combineShowfields = undefined
+addPlayers :: Board -> [(Pos, Occupacy)] -> [(Pos, Occupacy, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
+addPlayers board ls = map f ls
+        where
+            posA = pos $ playerA $ board
+            posB = pos $ playerB $ board
+            f (pos, occ)
+                        | posA == pos = (pos, occ, Just 'A')
+                        | posB == pos = (pos, occ, Just 'B')
+                        | otherwise = (pos, occ, Nothing)
+;
+toStringAndcombine = undefined
 
 initPos :: Pos
-initPos = (1,1)
+initPos = (0,0)
 
 mkBoard w h nameA nameB = let   playerAStart = initPos
                                 playerBStart = opposingPos w h initPos
@@ -147,7 +165,7 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
 ;
 
 mkClearFields :: Int -> Int -> Fields
-mkClearFields w h = fromList [ ((x,y), Neutral) | x <- [1..w], y <- [1..h] ]
+mkClearFields w h = fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 
 
 initialize :: Pos -> Pos -> Fields -> Fields
@@ -155,10 +173,16 @@ initialize startA startB = insert startB B . insert startA A
 
 opposingPos :: Int -> Int -> Pos -> Pos
 opposingPos w h (initX, initY)
-            | odd w || odd h = error "invalid size! Excepted even numbers, but got " ++ show (w,h)
-            | otherwise = undefined
+            | odd w || odd h = error $ "invalid size! Excepted even numbers, but got " ++ show (w,h)
+            | otherwise = let oppX = (initX + (w `div` 2)) `mod` w
+                              oppY = (initY + (h `div` 2)) `mod` h
+                          in (oppX, oppY)
 
 playMove :: Board -> (Move, Move) -> (Maybe Stats, Board, PlayerAction, PlayerAction)
-playMove = undefined
+playMove oldBoard (moveA, moveB) = (Nothing,
+                                    oldBoard,
+                                    MoveIntoFriendly initPos initPos,
+                                    MoveIntoFriendly initPos initPos)    -- TODO
+;
 
 
