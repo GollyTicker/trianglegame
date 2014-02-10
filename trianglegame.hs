@@ -126,7 +126,7 @@ data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
 -- quadratic representation of the baords
 -- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char
 prettyShow :: Board -> String
-prettyShow board = combineShownFields . showAllFields . fieldsToIntermedfield $ board
+prettyShow board = combineShownFields (width board) . showAllFields . fieldsToIntermedfield $ board
 ;
 
 -- field field is getting mapped to a Tuple containting the information to be shown
@@ -171,8 +171,8 @@ xCoord = fst . fst3
 yCoord = snd . fst3
 
 -- combines all the intermediate Strings at the desired positions
-combineShownFields :: [(Pos, String, String)] -> String
-combineShownFields xs = combineAllRows . formRows . sortBy (comparing yCoord) . sortBy (comparing fst3) $ xs
+combineShownFields :: Int -> [(Pos, String, String)] -> String
+combineShownFields w xs = combineAllRows w . formRows . sortBy (comparing yCoord) . sortBy (comparing fst3) $ xs
 
 
 formRows :: [(Pos, String, String)] -> [(Int, String)]
@@ -184,23 +184,23 @@ formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by 
 ;
 
 -- an assumption is, that the triangle for the field (0,0) points downwards. that means that (0,0) and (0,h-1) are directly connected
-combineAllRows :: [(Int, String)] -> String
-combineAllRows xs = intercalate newLine . map addBars $ xs
+combineAllRows :: Int -> [(Int, String)] -> String
+combineAllRows w xs = intercalate newLine . map (addBars w) $ xs
 
 
 -- adds horizontal bars (minuses) inbetween an upper and lower field if they're not directly connected
 -- it adds the bars above the current Position and uses the facts taht each field is two chars wide and
 -- that inbetween two fields a single blank is inserted
-addBars :: (Int, String) -> String
-addBars (y, str)
-            | even y    = combine . snd . mapAccumL step tokens      . zip [0..] $ takeWhile (/='\n') str
-            | otherwise = combine . snd . mapAccumL step (tail tokens) . zip [0..] $ takeWhile (/='\n') str
+addBars :: Int -> (Int, String) -> String
+addBars w (y, str)                                -- (length $ takeWhile (/='\n') str) should be equal to (width*3 - 1)
+            | even y    = combine . snd . mapAccumL step tokens        $ [0..(w*3 - 1) - 1]
+            | otherwise = combine . snd . mapAccumL step (tail tokens) $ [0..(w*3 - 1) - 1]
         where
-            step :: [Char] -> (Int, Char) -> ([Char], Char)
-            step tks (idx, chr)
-                        | idx `mod` 3 == 0 = (tks, head tks)        -- first character of a field
+            step :: [Char] -> Int -> ([Char], Char)
+            step tks idx
+                        | idx `mod` 3 == 0 = (tks, head tks)   -- first character of a field
                         | idx `mod` 3 == 1 = (tks, head tks)   -- second character of a field
-                        | idx `mod` 3 == 2 = (tail tks, ' ')             -- these are the empty spaces inbetween coloumns of fields
+                        | idx `mod` 3 == 2 = (tail tks, ' ')   -- these are the empty spaces inbetween coloumns of fields
                         | otherwise = error "duh."
             combine :: String -> String
             combine = (++ newLine ++ str)
