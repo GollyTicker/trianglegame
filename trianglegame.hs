@@ -126,18 +126,15 @@ data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
 ;
 -- TODO, better printing
 
-
+-- the assumption is, that the x and y Positins are numbers from 0 to 9 and therefore need exactly 1 char
 prettyShow :: Board -> String
-prettyShow = toStringAndcombine . combineShowfields . fieldsToInterMedShowfield   -- TODO
+prettyShow = combineShownFields . showAllFields . fieldsToInterMedfield   -- TODO
 
-fieldsToInterMedShowfield :: Board -> [(Pos, Occupacy, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
-fieldsToInterMedShowfield board = addPlayers board . elems . mapWithKey toIntermedShowfield . fields $ board
+fieldsToInterMedfield :: Board -> [(Pos, Occupacy, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
+fieldsToInterMedfield board = addPlayers board . elems . mapWithKey initialTuple . fields $ board
 
-toIntermedShowfield :: Pos -> Occupacy -> (Pos, Occupacy)
-toIntermedShowfield p c = (p, c)
-
-combineShowfields = undefined
-
+initialTuple :: Pos -> Occupacy -> (Pos, Occupacy)
+initialTuple p c = (p, c)
 
 addPlayers :: Board -> [(Pos, Occupacy)] -> [(Pos, Occupacy, Maybe Char)]
 addPlayers board ls = map f ls
@@ -149,7 +146,18 @@ addPlayers board ls = map f ls
                         | posB == pos = (pos, occ, Just 'B')
                         | otherwise = (pos, occ, Nothing)
 ;
-toStringAndcombine = undefined
+
+combineShownFields = undefined
+
+-- the first String is the first line, the second is the second
+showAllFields :: [(Pos, Occupacy, Maybe Char)] -> [(Pos, String, String)]
+showAllFields ls = map f ls
+            where
+                f (pos@(x,y), occ, maybePlayer) = (pos, show x ++ show y, show occ ++ showPlayer)
+                    where
+                        showPlayer = case maybePlayer of Nothing -> " "
+                                                         Just a -> [a]
+;
 
 initPos :: Pos
 initPos = (0,0)
