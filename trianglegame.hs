@@ -45,6 +45,7 @@ main = do
 -- it returns the results of the game when it's finished
 playGame :: Board -> IO Stats
 playGame board = do
+            putStrLn ""
             putStrLn $ "Turn " ++ show (turnCount board) ++ " - enter your moves:"
             unsafeMoves <- getLine
             let moves :: (Move, Move)
@@ -145,7 +146,8 @@ showAllFields ls = map f ls
 
 
 -- combines all the intermediate Strings at the desired positions
-combineShownFields = undefined
+combineShownFields :: [(Pos, String, String)] -> String
+combineShownFields = const "A"
 
 
 -- the initial Pos for Player A
