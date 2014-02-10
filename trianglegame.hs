@@ -5,21 +5,21 @@ import Data.Ord (comparing)
 
 
 
-{- Please compile using -Wall flag. Thank you. -}
+{- Please compile or load using the -Wall flag. Thank you. -}
 
 
 
 -- runs all tests in the console
 runTests :: IO ()
 runTests = do
-        counts <- runTestTT $ TestList unitsProblemTests
+        counts <- runTestTT $ TestList unitTests
         if failures counts /= 0
-            then putStrLn ">> Mismatch is tests occurred!"
+            then putStrLn ">> Mismatch in tests occurred!"
             else return ()
 ;
 
-unitsProblemTests :: [Test]
-unitsProblemTests = [
+unitTests :: [Test]
+unitTests = [
                        "testBoard" ~:  testBoard
                     ]
 ;
@@ -49,6 +49,7 @@ main = do
         putStrLn "Game starts now!"
         let board = mkBoard 6 4 n1 n2
         stats <- playGame board
+        putStrLn "Game finished!"
         print stats
 ;
 
@@ -61,10 +62,10 @@ playGame board = do
             unsafeMoves <- getLine
             let moves :: (Move, Move)
                 moves = read unsafeMoves
-                eitherMovedBoard = playMove board moves
-                Left errStr = eitherMovedBoard
-                Right (maybeStats, newBoard, p1Action, p2Action) = eitherMovedBoard
-            if isError eitherMovedBoard
+                maybeBoard = playMove board moves
+                Left errStr = maybeBoard
+                Right (maybeStats, newBoard, p1Action, p2Action) = maybeBoard
+            if isError maybeBoard
                 then do putStrLn errStr
                         putStrLn "Try again."
                         playGame board
@@ -78,7 +79,7 @@ playGame board = do
                                     Just stats -> return stats
 ;
 
-isError :: Either a b -> Bool
+isError :: Either String b -> Bool
 isError (Left _) = True
 isError (Right _) = False
 
@@ -96,6 +97,7 @@ data Board = Board {
                 turnCount :: Int    -- counts the turns already moved on the board
             } deriving Show
 ;
+
 -- each field is either neutral or As field or Bs field.
 data Occupation = A | B | N deriving (Show, Eq)
 
@@ -139,9 +141,9 @@ addPlayers board ls = map f ls
             posA = pPos $ playerA $ board
             posB = pPos $ playerB $ board
             f (pos, occ)
-                        | posA == pos = (pos, occ, Just 'A')
-                        | posB == pos = (pos, occ, Just 'B')
-                        | otherwise = (pos, occ, Nothing)
+                    | posA == pos = (pos, occ, Just 'A') -- TODO use the first differing character of the given names here
+                    | posB == pos = (pos, occ, Just 'B') --      use the first differing character of the given names here
+                    | otherwise = (pos, occ, Nothing)
 ;
 
 
@@ -163,6 +165,7 @@ newLine = "\n"
 fst3 :: (a, b, c) -> a
 fst3 (a, _, _) = a
 
+-- helper function ot get the specific coordinate in that tuple
 xCoord, yCoord :: (Pos, b, c) -> Int
 xCoord = fst . fst3
 yCoord = snd . fst3
@@ -180,8 +183,21 @@ formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by 
                        in (yCoord $ head ls, intercalate " " fstLines ++ newLine ++ intercalate " " sndLines)
 ;
 
+-- an assumption is, that the triangle for the field (0,0) points downwards. that means that (0,0) and (0,1) are not directly connected
 combineAllRows :: [(Int, String)] -> String
-combineAllRows = undefined
+combineAllRows xs = intercalate newLine . map addBars $ xs
+
+
+-- adds horizontal bars (minuses) inbetween an upper and lower field if they're not directly connected
+-- it adds the bars above the current Position and uses the facts taht each field is two chars wide and
+-- that inbetween two fields a single blank is inserted
+addBars :: (Int, String) -> String
+addBars (y, str)
+            | even y = zipWith (f tokens) [0..] str
+            | otherwise = zipWith (f $ tail tokens) [0..] str
+        where
+            f tks = (\x str undefined
+            tokens = '-' : ' ' : tokens
 
 -- the initial Pos for Player A
 initPos :: Pos
@@ -205,12 +221,12 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
 mkClearFields :: Int -> Int -> Fields
 mkClearFields w h = fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 
--- the starting points of player A and B are already in their oppucation
+-- at the beginng of the game the starting points of player A and B are already in their oppucation
 initialize :: Pos -> Pos -> Fields -> Fields
 initialize startA startB = insert startB B . insert startA A
 
 -- given an starting point for a player, it calculates the most distant
--- field given the size of the baord. trust me, this works as intended.
+-- field given the size of the board. this works because of the topology of the game board.
 opposingPos :: Int -> Int -> Pos -> Pos
 opposingPos w h (initX, initY)
             | odd w || odd h = error $ "invalid size! Excepted even numbers, but got " ++ show (w,h)
