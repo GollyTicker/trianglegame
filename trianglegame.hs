@@ -1,5 +1,5 @@
 import Test.HUnit hiding (test)
-import Data.Map.Strict (Map, fromList, insert, size, mapWithKey)
+import Data.Map.Strict (Map, fromList, insert, size, mapWithKey, elems)
 
 -- (<<) is a infix short of map -- should have a low precedence
 infixr 5 <<
@@ -130,14 +130,16 @@ data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
 prettyShow :: Board -> String
 prettyShow = toStringAndcombine . combineShowfields . fieldsToInterMedShowfield   -- TODO
 
-fieldsToInterMedShowfield :: Board -> [(Pos, Occupacy)]
-fieldsToInterMedShowfield board = addPlayers board . mapWithKey toIntermedShowfield . fields $ board
+fieldsToInterMedShowfield :: Board -> [(Pos, Occupacy, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
+fieldsToInterMedShowfield board = addPlayers board . elems . mapWithKey toIntermedShowfield . fields $ board
 
 toIntermedShowfield :: Pos -> Occupacy -> (Pos, Occupacy)
 toIntermedShowfield p c = (p, c)
 
 combineShowfields = undefined
-addPlayers :: Board -> [(Pos, Occupacy)] -> [(Pos, Occupacy, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
+
+
+addPlayers :: Board -> [(Pos, Occupacy)] -> [(Pos, Occupacy, Maybe Char)]
 addPlayers board ls = map f ls
         where
             posA = pos $ playerA $ board
