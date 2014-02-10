@@ -1,48 +1,12 @@
 import Test.HUnit hiding (test)
 import Data.Map.Strict (Map, fromList, insert, size, mapWithKey, elems)
 
--- (<<) is a infix short of map -- should have a low precedence
-infixr 5 <<
-(<<) :: (a -> b) -> [a] -> [b]
-f << ls = map f ls
--- Usage: 
--- *main> (*21) << [-2..6]
--- [-42,-21,0,21,42,63,84,105,126]
-
-infix 1 <<<
-infix 1 >>>
-(<<<), printLs :: Show b => (a -> b) -> [] a -> IO ()
-(>>>) :: Show b => [] a -> (a -> b) -> IO ()
-printLs f = mapM_ (print . f)
-f <<< ls = printLs f ls
-ls >>> f = printLs f ls
--- Sample usage:
--- *main> (\n -> combinations n "acbd") <<< [0..4]
--- [""]
--- ["a","c","b","d"]
--- ["ac","ab","ad","cb","cd","bd"]
--- ["acb","acd","abd","cbd"]
--- ["acbd"]
--- Or: *main> [0..4] >>> \n -> combinations n "acbd"
-
--- Helpful for drawing on console
-draw :: Integral a => a -> String
-draw n = replicate (fromIntegral n) '*'
-
-dot,(.:) :: (b -> c) -> (a -> a1 -> b) -> a -> a1 -> c
-dot = (.) (.) (.)   -- http://www.haskell.org/haskellwiki/Pointfree#Dot
-(.:) = dot
-infixr 9 `dot`
-infixr 9 .:
-
--- ================================================================
-
+-- test runns all test in the console
 test :: IO ()
 test = do
-        putStrLn ">> HUnit tests..."
         counts <- runTestTT $ TestList unitsProblemTests
         if failures counts /= 0
-            then putStrLn ">> Tests failed."
+            then putStrLn ">> Mismatch is tests occurred!"
             else return ()
 ;
 
@@ -62,6 +26,7 @@ testBoard = [
 
 -- =====================================================================
 
+-- start a game
 main = do
         putStrLn "First Player Name:"
         n1 <- getLine
@@ -76,67 +41,86 @@ main = do
         print stats
 ;
 
+-- keeps taking moves and shows the boards and actions until the game is over
+-- it returns the results of the game when it's finished
 playGame :: Board -> IO Stats
 playGame board = do
             putStrLn $ "Turn " ++ show (turnCount board) ++ " - enter your moves:"
             unsafeMoves <- getLine
             let moves :: (Move, Move)
                 moves = read unsafeMoves
-                (maybeStats, newBoard, p1Action, p2Action) = playMove board moves
-            putStrLn $ show (playerA board) ++ " " ++ show p1Action
-            putStrLn $ show (playerB board) ++ " " ++ show p2Action
-            putStrLn "Board:"
-            putStrLn $ prettyShow newBoard
-            case maybeStats of
-                        Nothing -> playGame newBoard
-                        Just stats -> return stats
+                eitherMovedBoard = playMove board moves
+                Left errStr = eitherMovedBoard
+                Right (maybeStats, newBoard, p1Action, p2Action) = eitherMovedBoard
+            if isError eitherMovedBoard
+                then do putStrLn errStr
+                        putStrLn "Try again."
+                        playGame board
+                else do 
+                        putStrLn $ show (playerA board) ++ " " ++ show p1Action
+                        putStrLn $ show (playerB board) ++ " " ++ show p2Action
+                        putStrLn "Board:"
+                        putStrLn $ prettyShow newBoard
+                        case maybeStats of
+                                    Nothing -> playGame newBoard
+                                    Just stats -> return stats
 ;
 
+isError :: Either a b -> Bool
+isError (Left _) = True
+isError (Right _) = False
+
 type Pos = (Int, Int)       -- zero-based indices
-type Fields = Map (Int, Int) Occupacy
+
+-- short-cut for the Map
+type Fields = Map (Int, Int) Occupation
 
 data Board = Board {
                 width :: Int,   -- widht and height say the number of horizontal/vertical fields
                 height :: Int,
                 playerA :: Player,
                 playerB :: Player,
-                fields :: Map Pos Occupacy,
-                turnCount :: Int
+                fields :: Map Pos Occupation, -- each field is either neutral or As field or Bs field.
+                turnCount :: Int    -- counts the turns already moved on the board
             } deriving Show
 ;
+-- each field is either neutral or As field or Bs field.
+data Occupation = A | B | N deriving (Show, Eq)
 
+-- currently a Player only has a Position and a name
 data Player = Player {
                     pos :: Pos,
                     name :: String
               } deriving (Show, Eq)
 ;
 
+-- currently only holds the winning Player
 data Stats = Stats {
-                    winner :: Player,
-                    loser :: Player
+                    winner :: Player
                 } deriving Show
+;
 
-data Occupacy = A | B | N deriving (Show, Eq)
-
+-- Seen from the quadratic representation, a move goes either to the left or to teh right or vertically.
+-- whether it goes to the top or bottom is dependent form the actual field.
 data Move = L | R | V deriving (Show, Eq, Read)
 
 data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
                     MoveIntoFriendly { fromField :: Pos, toField :: Pos}     |
                     MoveIntoNeutral { stage :: Int, fromField :: Pos, toField :: Pos} deriving Show
 ;
--- TODO, better printing
 
--- the assumption is, that the x and y Positins are numbers from 0 to 9 and therefore need exactly 1 char
+-- quadratic representation of the baords
+-- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char
 prettyShow :: Board -> String
-prettyShow = combineShownFields . showAllFields . fieldsToInterMedfield   -- TODO
+prettyShow = combineShownFields . showAllFields . fieldsToInterMedfield
 
-fieldsToInterMedfield :: Board -> [(Pos, Occupacy, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
-fieldsToInterMedfield board = addPlayers board . elems . mapWithKey initialTuple . fields $ board
+-- field field is getting mapped to a Tuple containting the information to be shown
+-- it first creates a list of [(Pos, Occupation)] and then adds the Players into them
+fieldsToInterMedfield :: Board -> [(Pos, Occupation, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
+fieldsToInterMedfield board = addPlayers board . elems . mapWithKey (\pos occ -> (pos, occ)) . fields $ board
 
-initialTuple :: Pos -> Occupacy -> (Pos, Occupacy)
-initialTuple p c = (p, c)
-
-addPlayers :: Board -> [(Pos, Occupacy)] -> [(Pos, Occupacy, Maybe Char)]
+-- adds the players at their respective Tuples
+addPlayers :: Board -> [(Pos, Occupation)] -> [(Pos, Occupation, Maybe Char)]
 addPlayers board ls = map f ls
         where
             posA = pos $ playerA $ board
@@ -147,10 +131,10 @@ addPlayers board ls = map f ls
                         | otherwise = (pos, occ, Nothing)
 ;
 
-combineShownFields = undefined
 
--- the first String is the first line, the second is the second
-showAllFields :: [(Pos, Occupacy, Maybe Char)] -> [(Pos, String, String)]
+-- creates intermediate Strings for the latter join
+-- the first String is the first line, the second String is the second line
+showAllFields :: [(Pos, Occupation, Maybe Char)] -> [(Pos, String, String)]
 showAllFields ls = map f ls
             where
                 f (pos@(x,y), occ, maybePlayer) = (pos, show x ++ show y, show occ ++ showPlayer)
@@ -159,9 +143,16 @@ showAllFields ls = map f ls
                                                          Just a -> [a]
 ;
 
+
+-- combines all the intermediate Strings at the desired positions
+combineShownFields = undefined
+
+
+-- the initial Pos for Player A
 initPos :: Pos
 initPos = (0,0)
 
+-- makes th board
 mkBoard w h nameA nameB = let   playerAStart = initPos
                                 playerBStart = opposingPos w h initPos
                           in Board {
@@ -174,22 +165,29 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
                                     }
 ;
 
+-- makes all the neutral fields
 mkClearFields :: Int -> Int -> Fields
 mkClearFields w h = fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 
-
+-- the starting points of player A and B are already in their oppucation
 initialize :: Pos -> Pos -> Fields -> Fields
 initialize startA startB = insert startB B . insert startA A
 
+-- given an starting point for a player, it calculated the most distant
+-- field given the size of the baord. trust me, this works as intended.
 opposingPos :: Int -> Int -> Pos -> Pos
 opposingPos w h (initX, initY)
             | odd w || odd h = error $ "invalid size! Excepted even numbers, but got " ++ show (w,h)
             | otherwise = let oppX = (initX + (w `div` 2)) `mod` w
                               oppY = (initY + (h `div` 2)) `mod` h
                           in (oppX, oppY)
+;
 
-playMove :: Board -> (Move, Move) -> (Maybe Stats, Board, PlayerAction, PlayerAction)
-playMove oldBoard (moveA, moveB) = (Nothing,
+-- given two moves, this function makes the moves and returns the actions
+-- if the inputs were invalid, then a error is reported.
+-- TODO: sometimes one might not have a move, because one is attacking... add a Void Move.
+playMove :: Board -> (Move, Move) -> Either String (Maybe Stats, Board, PlayerAction, PlayerAction)
+playMove oldBoard (moveA, moveB) = Right (Nothing,
                                     oldBoard,
                                     MoveIntoFriendly initPos initPos,
                                     MoveIntoFriendly initPos initPos)    -- TODO
