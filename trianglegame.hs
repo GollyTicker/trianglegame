@@ -1,6 +1,6 @@
 import Test.HUnit (Test(TestList), Assertion, runTestTT, assertEqual, failures, (~:))
 import Data.Map.Strict (Map, fromList, insert, size, mapWithKey, elems)
-import Data.List (sortBy, groupBy, intercalate)
+import Data.List (sortBy, groupBy, intercalate, mapAccumL)
 import Data.Ord (comparing)
 
 
@@ -183,7 +183,7 @@ formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by 
                        in (yCoord $ head ls, intercalate " " fstLines ++ newLine ++ intercalate " " sndLines)
 ;
 
--- an assumption is, that the triangle for the field (0,0) points downwards. that means that (0,0) and (0,1) are not directly connected
+-- an assumption is, that the triangle for the field (0,0) points downwards. that means that (0,0) and (0,h-1) are directly connected
 combineAllRows :: [(Int, String)] -> String
 combineAllRows xs = intercalate newLine . map addBars $ xs
 
@@ -193,11 +193,18 @@ combineAllRows xs = intercalate newLine . map addBars $ xs
 -- that inbetween two fields a single blank is inserted
 addBars :: (Int, String) -> String
 addBars (y, str)
-            | even y = zipWith (f tokens) [0..] str
-            | otherwise = zipWith (f $ tail tokens) [0..] str
+            | even y    = combine . snd . mapAccumL step tokens      . zip [0..] $ takeWhile (/='\n') str
+            | otherwise = combine . snd . mapAccumL step (tail tokens) . zip [0..] $ takeWhile (/='\n') str
         where
-            f tks = (\x str undefined
-            tokens = '-' : ' ' : tokens
+            step :: [Char] -> (Int, Char) -> ([Char], Char)
+            step tks (idx, chr)
+                        | idx `mod` 3 == 0 = (tks, head tks)        -- first character of a field
+                        | idx `mod` 3 == 1 = (tks, head tks)   -- second character of a field
+                        | idx `mod` 3 == 2 = (tail tks, ' ')             -- these are the empty spaces inbetween coloumns of fields
+                        | otherwise = error "duh."
+            combine :: String -> String
+            combine = (++ newLine ++ str)
+            tokens = ' ' : '-' : tokens
 
 -- the initial Pos for Player A
 initPos :: Pos
