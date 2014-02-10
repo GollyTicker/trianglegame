@@ -1,20 +1,30 @@
-import Test.HUnit hiding (test)
+import Test.HUnit (Test(TestList), Assertion, runTestTT, assertEqual, failures, (~:))
 import Data.Map.Strict (Map, fromList, insert, size, mapWithKey, elems)
+import Data.List (sortBy, groupBy, intercalate)
+import Data.Ord (comparing)
 
--- test runns all test in the console
-test :: IO ()
-test = do
+
+
+{- Please compile using -Wall flag. Thank you. -}
+
+
+
+-- runs all tests in the console
+runTests :: IO ()
+runTests = do
         counts <- runTestTT $ TestList unitsProblemTests
         if failures counts /= 0
             then putStrLn ">> Mismatch is tests occurred!"
             else return ()
 ;
 
+unitsProblemTests :: [Test]
 unitsProblemTests = [
                        "testBoard" ~:  testBoard
                     ]
 ;
 
+testBoard :: [Assertion]
 testBoard = [
                assertEqual "opposingPos1" (5,3) $ opposingPos 6 4 (2,1),
                assertEqual "opposingPos2" (3,2) $ opposingPos 6 4 (0,0),
@@ -27,6 +37,7 @@ testBoard = [
 -- =====================================================================
 
 -- start a game
+main :: IO ()
 main = do
         putStrLn "First Player Name:"
         n1 <- getLine
@@ -90,8 +101,8 @@ data Occupation = A | B | N deriving (Show, Eq)
 
 -- currently a Player only has a Position and a name
 data Player = Player {
-                    pos :: Pos,
-                    name :: String
+                    pPos :: Pos,
+                    pName :: String
               } deriving (Show, Eq)
 ;
 
@@ -113,19 +124,20 @@ data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
 -- quadratic representation of the baords
 -- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char
 prettyShow :: Board -> String
-prettyShow = combineShownFields . showAllFields . fieldsToInterMedfield
+prettyShow board = combineShownFields . showAllFields . fieldsToIntermedfield $ board
+;
 
 -- field field is getting mapped to a Tuple containting the information to be shown
 -- it first creates a list of [(Pos, Occupation)] and then adds the Players into them
-fieldsToInterMedfield :: Board -> [(Pos, Occupation, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
-fieldsToInterMedfield board = addPlayers board . elems . mapWithKey (\pos occ -> (pos, occ)) . fields $ board
+fieldsToIntermedfield :: Board -> [(Pos, Occupation, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
+fieldsToIntermedfield board = addPlayers board . elems . mapWithKey (\pos occ -> (pos, occ)) . fields $ board
 
 -- adds the players at their respective Tuples
 addPlayers :: Board -> [(Pos, Occupation)] -> [(Pos, Occupation, Maybe Char)]
 addPlayers board ls = map f ls
         where
-            posA = pos $ playerA $ board
-            posB = pos $ playerB $ board
+            posA = pPos $ playerA $ board
+            posB = pPos $ playerB $ board
             f (pos, occ)
                         | posA == pos = (pos, occ, Just 'A')
                         | posB == pos = (pos, occ, Just 'B')
@@ -144,17 +156,39 @@ showAllFields ls = map f ls
                                                          Just a -> [a]
 ;
 
+newLine :: String
+newLine = "\n"
+
+-- fst for Tuple3
+fst3 :: (a, b, c) -> a
+fst3 (a, _, _) = a
+
+xCoord, yCoord :: (Pos, b, c) -> Int
+xCoord = fst . fst3
+yCoord = snd . fst3
 
 -- combines all the intermediate Strings at the desired positions
 combineShownFields :: [(Pos, String, String)] -> String
-combineShownFields = const "A"
+combineShownFields xs = combineAllRows . formRows . sortBy (comparing yCoord) . sortBy (comparing fst3) $ xs
 
+
+formRows :: [(Pos, String, String)] -> [(Int, String)]
+formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by equal y coord
+            where
+                f :: [(Pos, String, String)] -> (Int, String)
+                f ls = let (_, fstLines, sndLines) = unzip3 ls
+                       in (yCoord $ head ls, intercalate " " fstLines ++ newLine ++ intercalate " " sndLines)
+;
+
+combineAllRows :: [(Int, String)] -> String
+combineAllRows = undefined
 
 -- the initial Pos for Player A
 initPos :: Pos
 initPos = (0,0)
 
 -- makes th board
+mkBoard :: Int -> Int -> String -> String -> Board
 mkBoard w h nameA nameB = let   playerAStart = initPos
                                 playerBStart = opposingPos w h initPos
                           in Board {
@@ -175,7 +209,7 @@ mkClearFields w h = fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 initialize :: Pos -> Pos -> Fields -> Fields
 initialize startA startB = insert startB B . insert startA A
 
--- given an starting point for a player, it calculated the most distant
+-- given an starting point for a player, it calculates the most distant
 -- field given the size of the baord. trust me, this works as intended.
 opposingPos :: Int -> Int -> Pos -> Pos
 opposingPos w h (initX, initY)
