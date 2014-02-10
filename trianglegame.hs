@@ -86,14 +86,14 @@ isError (Right _) = False
 type Pos = (Int, Int)       -- zero-based indices
 
 -- short-cut for the Map
-type Fields = Map (Int, Int) Occupation
+type Fields = Map Pos Occupation
 
 data Board = Board {
                 width :: Int,   -- widht and height say the number of horizontal/vertical fields
                 height :: Int,
                 playerA :: Player,
                 playerB :: Player,
-                fields :: Map Pos Occupation, -- each field is either neutral or As field or Bs field.
+                fields :: Fields, -- each field is either neutral or As field or Bs field.
                 turnCount :: Int    -- counts the turns already moved on the board
             } deriving Show
 ;
@@ -127,7 +127,7 @@ data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
 -- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char
 prettyShow :: Board -> String
 prettyShow board = combineShownFields (width board) . showAllFields . fieldsToIntermedfield $ board
-;
+
 
 -- field field is getting mapped to a Tuple containting the information to be shown
 -- it first creates a list of [(Pos, Occupation)] and then adds the Players into them
