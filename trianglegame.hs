@@ -175,6 +175,7 @@ combineShownFields :: Int -> [(Pos, String, String)] -> String
 combineShownFields w xs = combineAllRows w . formRows . sortBy (comparing yCoord) . sortBy (comparing fst3) $ xs
 
 
+
 formRows :: [(Pos, String, String)] -> [(Int, String)]
 formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by equal y coord
             where
@@ -185,8 +186,10 @@ formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by 
 
 -- an assumption is, that the triangle for the field (0,0) points downwards. that means that (0,0) and (0,h-1) are directly connected
 combineAllRows :: Int -> [(Int, String)] -> String
-combineAllRows w xs = intercalate newLine . map (addBars w) $ xs
+combineAllRows w xs = intercalate newLine . repeatFirstLine . map (addBars w) $ xs
 
+repeatFirstLine :: [String] -> [String]
+repeatFirstLine xs = xs ++ [takeWhile (/='\n') (head xs)]
 
 -- adds horizontal bars (minuses) inbetween an upper and lower field if they're not directly connected
 -- it adds the bars above the current Position and uses the facts taht each field is two chars wide and
