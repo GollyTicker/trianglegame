@@ -1,9 +1,11 @@
+
+module Trianglegame where
+
+import Gamedata
+import View (prettyShow)
+
 import Test.HUnit (Test(TestList), Assertion, runTestTT, assertEqual, failures, (~:))
-import Data.Map.Strict (Map, fromList, insert, size, mapWithKey, elems)
-import Data.List (sortBy, groupBy, intercalate, mapAccumL)
-import Data.Ord (comparing)
-
-
+import Data.Map.Strict (fromList, insert, size)
 
 {- Please compile or load using the -Wall flag. Thank you. -}
 
@@ -53,6 +55,7 @@ main = do
         print stats
 ;
 
+
 -- keeps taking moves and shows the boards and actions until the game is over
 -- it returns the results of the game when it's finished
 playGame :: Board -> IO Stats
@@ -70,7 +73,7 @@ playGame board = do
                         putStrLn "Try again."
                         playGame board
                 else do 
-                        putStrLn $ show (playerA board) ++ " " ++ show p1Action
+                        putStrLn $ show (playerA board) ++ " " ++ show p1Action  -- make better Action prints
                         putStrLn $ show (playerB board) ++ " " ++ show p2Action
                         putStrLn "Board:"
                         putStrLn $ prettyShow newBoard
@@ -83,131 +86,6 @@ isError :: Either String b -> Bool
 isError (Left _) = True
 isError (Right _) = False
 
-type Pos = (Int, Int)       -- zero-based indices
-
--- short-cut for the Map
-type Fields = Map Pos Occupation
-
-data Board = Board {
-                width :: Int,   -- widht and height say the number of horizontal/vertical fields
-                height :: Int,
-                playerA :: Player,
-                playerB :: Player,
-                fields :: Fields, -- each field is either neutral or As field or Bs field.
-                turnCount :: Int    -- counts the turns already moved on the board
-            } deriving Show
-;
-
--- each field is either neutral or As field or Bs field.
-data Occupation = A | B | N deriving (Show, Eq)
-
--- currently a Player only has a Position and a name
-data Player = Player {
-                    pPos :: Pos,
-                    pName :: String
-              } deriving (Show, Eq)
-;
-
--- currently only holds the winning Player
-data Stats = Stats {
-                    winner :: Player
-                } deriving Show
-;
-
--- Seen from the quadratic representation, a move goes either to the left or to teh right or vertically.
--- whether it goes to the top or bottom is dependent form the actual field.
-data Move = L | R | V deriving (Show, Eq, Read)
-
-data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
-                    MoveIntoFriendly { fromField :: Pos, toField :: Pos}     |
-                    MoveIntoNeutral { stage :: Int, fromField :: Pos, toField :: Pos} deriving Show
-;
-
--- quadratic representation of the baords
--- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char
-prettyShow :: Board -> String
-prettyShow board = combineShownFields (width board) . showAllFields . fieldsToIntermedfield $ board
-
-
--- field field is getting mapped to a Tuple containting the information to be shown
--- it first creates a list of [(Pos, Occupation)] and then adds the Players into them
-fieldsToIntermedfield :: Board -> [(Pos, Occupation, Maybe Char)]     -- the maybe Char represents no standing player or player A or B
-fieldsToIntermedfield board = addPlayers board . elems . mapWithKey (\pos occ -> (pos, occ)) . fields $ board
-
--- adds the players at their respective Tuples
-addPlayers :: Board -> [(Pos, Occupation)] -> [(Pos, Occupation, Maybe Char)]
-addPlayers board ls = map f ls
-        where
-            posA = pPos $ playerA $ board
-            posB = pPos $ playerB $ board
-            f (pos, occ)
-                    | posA == pos = (pos, occ, Just 'a') -- TODO use the first differing character of the given names here
-                    | posB == pos = (pos, occ, Just 'b') --      use the first differing character of the given names here
-                    | otherwise = (pos, occ, Nothing)
-;
-
-
--- creates intermediate Strings for the latter join
--- the first String is the first line, the second String is the second line
-showAllFields :: [(Pos, Occupation, Maybe Char)] -> [(Pos, String, String)]
-showAllFields ls = map f ls
-            where
-                f (pos@(x,y), occ, maybePlayer) = (pos, show x ++ show y, show occ ++ showPlayer)
-                    where
-                        showPlayer = case maybePlayer of Nothing -> " "
-                                                         Just a -> [a]
-;
-
-newLine :: String
-newLine = "\n"
-
--- fst for Tuple3
-fst3 :: (a, b, c) -> a
-fst3 (a, _, _) = a
-
--- helper function ot get the specific coordinate in that tuple
-xCoord, yCoord :: (Pos, b, c) -> Int
-xCoord = fst . fst3
-yCoord = snd . fst3
-
--- combines all the intermediate Strings at the desired positions
-combineShownFields :: Int -> [(Pos, String, String)] -> String
-combineShownFields w xs = combineAllRows w . formRows . sortBy (comparing yCoord) . sortBy (comparing fst3) $ xs
-
-
-
-formRows :: [(Pos, String, String)] -> [(Int, String)]
-formRows xs = map f . groupBy (\a b -> yCoord a == yCoord b) $ xs   -- group by equal y coord
-            where
-                f :: [(Pos, String, String)] -> (Int, String)
-                f ls = let (_, fstLines, sndLines) = unzip3 ls
-                       in (yCoord $ head ls, intercalate " " fstLines ++ newLine ++ intercalate " " sndLines)
-;
-
--- an assumption is, that the triangle for the field (0,0) points downwards. that means that (0,0) and (0,h-1) are directly connected
-combineAllRows :: Int -> [(Int, String)] -> String
-combineAllRows w xs = intercalate newLine . repeatFirstLine . map (addBars w) $ xs
-
-repeatFirstLine :: [String] -> [String]
-repeatFirstLine xs = xs ++ [takeWhile (/='\n') (head xs)]
-
--- adds horizontal bars (minuses) inbetween an upper and lower field if they're not directly connected
--- it adds the bars above the current Position and uses the facts taht each field is two chars wide and
--- that inbetween two fields a single blank is inserted
-addBars :: Int -> (Int, String) -> String
-addBars w (y, str)                                -- (length $ takeWhile (/='\n') str) should be equal to (width*3 - 1)
-            | even y    = combine . snd . mapAccumL step tokens        $ [0..(w*3 - 1) - 1]
-            | otherwise = combine . snd . mapAccumL step (tail tokens) $ [0..(w*3 - 1) - 1]
-        where
-            step :: [Char] -> Int -> ([Char], Char)
-            step tks idx
-                        | idx `mod` 3 == 0 = (tks, head tks)   -- first character of a field
-                        | idx `mod` 3 == 1 = (tks, head tks)   -- second character of a field
-                        | idx `mod` 3 == 2 = (tail tks, ' ')   -- these are the empty spaces inbetween coloumns of fields
-                        | otherwise = error "duh."
-            combine :: String -> String
-            combine = (++ newLine ++ str)
-            tokens = ' ' : '-' : tokens
 
 -- the initial Pos for Player A
 initPos :: Pos
