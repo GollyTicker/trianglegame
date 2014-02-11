@@ -89,7 +89,6 @@ isError :: Either String b -> Bool
 isError (Left _) = True
 isError (Right _) = False
 
-
 -- the initial Pos for Player A
 initPos :: Pos
 initPos = (0,0)
@@ -101,8 +100,8 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
                           in Board {
                                         width = w,
                                         height = h,
-                                        playerA = Player playerAStart nameA,
-                                        playerB = Player playerBStart nameB,
+                                        playerA = Player playerAStart nameA Nothing,
+                                        playerB = Player playerBStart nameB Nothing,
                                         fields = (initialize playerAStart playerBStart $ mkClearFields w h),
                                         turnCount = 0
                                     }
@@ -116,7 +115,7 @@ mkClearFields w h = fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 initialize :: Pos -> Pos -> Fields -> Fields
 initialize startA startB = insert startB B . insert startA A
 
--- given an starting point for a player, it calculates the most distant
+-- given a starting point for a player, it calculates the most distant
 -- field given the size of the board. this works because of the topology of the game board.
 opposingPos :: Int -> Int -> Pos -> Pos
 opposingPos w h (initX, initY)
@@ -128,16 +127,31 @@ opposingPos w h (initX, initY)
 
 -- given two moves, this function makes the moves and returns the actions
 -- if the inputs were invalid, then a error is reported.
--- TODO: sometimes one might not have a move, because one is attacking... add a Void Move.
-playMove :: Board -> (Move, Move) -> Either String (Maybe Stats, Board, PlayerAction, PlayerAction)
-playMove oldBoard (moveA, moveB) = result
-                            where
-                                result = dummy
-                                dummy = Right (Nothing,
-                                        oldBoard,
-                                        MoveIntoFriendly initPos initPos,
-                                        MoveIntoFriendly initPos initPos)-- TODO
+-- TODO: sometimes one might not have a move, because one is attacking... add a Void Move?
+playMove :: Board -> (Move, Move) -> Either String (Maybe Stats, Board, Action, Action)
+playMove oldBoard (moveA, moveB) = do 
+                                    (board', actionA) <- move moveA A oldBoard
+                                    (board'', actionB) <- move moveB B board'
+                                    let newBoard = increaseTurnCount board''
+                                    return (gameStats newBoard, newBoard, actionA, actionB)
 ;
+
+move :: Move -> Occupation -> Board -> Either String (Board, Action)
+move mv p board
+        | otherwise = Left "this should come now!"
+
+finalTurns :: Int
+finalTurns = 31
+
+gameStats :: Board -> Maybe Stats
+gameStats b
+        | finalTurns == turnCount b = Just undefined    -- TODO: calculate winner
+        | otherwise = Nothing
+;
+
+increaseTurnCount :: Board -> Board
+increaseTurnCount (Board a b c d e f) = Board a b c d e (f+1)
+
 
 -- ======================================================================
 
@@ -173,7 +187,6 @@ abcd n = do
 ;
 
 -- first and seocnd are functions which can fail with an error Message
-
 first, second :: Integral a => a -> Either String a
 first n
     | n <= 5 = Right n

@@ -21,10 +21,15 @@ data Board = Board {
 -- each field is either neutral or As field or Bs field.
 data Occupation = A | B | N deriving (Show, Eq)
 
--- currently a Player only has a Position and a name
+-- currently a Player has a Position and a name
+-- the action taken in the previous round is also saved,
+-- to see whether its an action that has to be continued
+-- If its Nothing, then one can make an action. If its an action
+-- then one has to continue that action.
 data Player = Player {
                     pPos :: Pos,
-                    pName :: String
+                    pName :: String,
+                    continuedAction :: Maybe Action
               } deriving (Show, Eq)
 ;
 
@@ -38,7 +43,7 @@ data Stats = Stats {
 -- whether it goes to the top or bottom is dependent form the actual field.
 data Move = L | R | V deriving (Show, Eq, Read)
 
-data PlayerAction = Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
-                    MoveIntoFriendly { fromField :: Pos, toField :: Pos}     |
-                    MoveIntoNeutral { stage :: Int, fromField :: Pos, toField :: Pos} deriving Show
+data Action =   Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
+                MoveIntoFriendly { fromField :: Pos, toField :: Pos}     |
+                MoveIntoNeutral { stage :: Int, fromField :: Pos, toField :: Pos} deriving (Eq, Show)
 ;
