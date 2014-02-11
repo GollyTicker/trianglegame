@@ -9,7 +9,7 @@ type Pos = (Int, Int)       -- zero-based indices
 type Fields = Map Pos Occupation
 
 data Board = Board {
-                width :: Int,   -- widht and height say the number of horizontal/vertical fields
+                width :: Int,   -- width and height say the number of horizontal/vertical fields
                 height :: Int,
                 playerA :: Player,
                 playerB :: Player,

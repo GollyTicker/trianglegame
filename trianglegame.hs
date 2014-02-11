@@ -1,15 +1,18 @@
 
 module Trianglegame where
 
-import Gamedata
+import Gamedata -- everything
 import View (prettyShow)
 
 import Test.HUnit (Test(TestList), Assertion, runTestTT, assertEqual, failures, (~:))
 import Data.Map.Strict (fromList, insert, size)
 
+
+
 {- Please compile or load using the -Wall flag. Thank you. -}
 
 
+-- ==================================================================================
 
 -- runs all tests in the console
 runTests :: IO ()
@@ -22,8 +25,8 @@ runTests = do
 
 unitTests :: [Test]
 unitTests = [
-                       "testBoard" ~:  testBoard
-                    ]
+               "testBoard" ~:  testBoard
+            ]
 ;
 
 testBoard :: [Assertion]
@@ -127,10 +130,60 @@ opposingPos w h (initX, initY)
 -- if the inputs were invalid, then a error is reported.
 -- TODO: sometimes one might not have a move, because one is attacking... add a Void Move.
 playMove :: Board -> (Move, Move) -> Either String (Maybe Stats, Board, PlayerAction, PlayerAction)
-playMove oldBoard (moveA, moveB) = Right (Nothing,
-                                    oldBoard,
-                                    MoveIntoFriendly initPos initPos,
-                                    MoveIntoFriendly initPos initPos)    -- TODO
+playMove oldBoard (moveA, moveB) = result
+                            where
+                                result = dummy
+                                dummy = Right (Nothing,
+                                        oldBoard,
+                                        MoveIntoFriendly initPos initPos,
+                                        MoveIntoFriendly initPos initPos)-- TODO
 ;
+
+-- ======================================================================
+
+{-
+
+Remainder to the usage of the either String as Error Monad.
+
+*Trianglegame> abcd 0
+Left "sorry, its too small"
+
+*Trianglegame> abcd 3
+Right 3
+
+*Trianglegame> abcd 6
+Left "its too large"
+
+*Trianglegame> abcd 0
+Left "sorry, its too small"
+
+*Trianglegame> abcd 4
+Left "I don't like four."
+
+-}
+
+-- abcd is a function which needs to use multiple functions that can fail.
+abcd :: Integer -> Either String Integer
+abcd n = do 
+            x <- first n
+            y <- second x
+            if y == 4
+                then Left "I don't like four."
+                else return y
+;
+
+-- first and seocnd are functions which can fail with an error Message
+
+first, second :: Integral a => a -> Either String a
+first n
+    | n <= 5 = Right n
+    | otherwise = Left "its too large"
+;
+
+second n
+    | n >= 1 = Right n
+    | otherwise = Left "sorry, its too small"
+;
+
 
 

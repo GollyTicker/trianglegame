@@ -1,7 +1,7 @@
 
 module View (prettyShow) where
 
-import Gamedata
+import Gamedata -- everything
 
 import Data.Map.Strict (elems, mapWithKey)
 import Data.List (sortBy, groupBy, intercalate, mapAccumL)
@@ -50,9 +50,8 @@ newLine = "\n"
 fst3 :: (a, b, c) -> a
 fst3 (a, _, _) = a
 
--- helper function ot get the specific coordinate in that tuple
-xCoord, yCoord :: (Pos, b, c) -> Int
-xCoord = fst . fst3
+-- helper function to get the specific coordinate in that tuple
+yCoord :: (Pos, b, c) -> Int
 yCoord = snd . fst3
 
 -- combines all the intermediate Strings at the desired positions
