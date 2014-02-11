@@ -141,8 +141,8 @@ addPlayers board ls = map f ls
             posA = pPos $ playerA $ board
             posB = pPos $ playerB $ board
             f (pos, occ)
-                    | posA == pos = (pos, occ, Just 'A') -- TODO use the first differing character of the given names here
-                    | posB == pos = (pos, occ, Just 'B') --      use the first differing character of the given names here
+                    | posA == pos = (pos, occ, Just 'a') -- TODO use the first differing character of the given names here
+                    | posB == pos = (pos, occ, Just 'b') --      use the first differing character of the given names here
                     | otherwise = (pos, occ, Nothing)
 ;
 
