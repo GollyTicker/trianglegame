@@ -8,6 +8,8 @@ type Pos = (Int, Int)       -- zero-based indices
 -- short-cut for the Map
 type Fields = Map Pos Occupation
 
+type Failable a = Either String a
+
 data Board = Board {
                 width :: Int,   -- width and height say the number of horizontal/vertical fields
                 height :: Int,
@@ -43,7 +45,20 @@ data Stats = Stats {
 -- whether it goes to the top or bottom is dependent form the actual field.
 data Move = L | R | V deriving (Show, Eq, Read)
 
-data Action =   Attack { stage :: Int, fromField :: Pos, toField :: Pos} |
-                MoveIntoFriendly { fromField :: Pos, toField :: Pos}     |
-                MoveIntoNeutral { stage :: Int, fromField :: Pos, toField :: Pos} deriving (Eq, Show)
+data Action =     AttackOpponent { 
+                        waitTurns :: Int,
+                        fromField :: Pos,
+                        toField :: Pos
+                        }
+                | VisitFriendly {
+                        waitTurns :: Int,
+                        fromField :: Pos,
+                        toField :: Pos
+                        }
+                | ConquerNeutral {
+                        waitTurns :: Int,
+                        fromField :: Pos,
+                        toField :: Pos
+                        }
+                deriving (Eq, Show)
 ;
