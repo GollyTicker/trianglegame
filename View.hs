@@ -1,7 +1,7 @@
 
 module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages) where
 
-import Gamedata -- everything (especially failing)
+import Types -- everything (especially failing)
 
 import Data.Map.Strict (elems, mapWithKey)
 import Data.List (sortBy, groupBy, intercalate, mapAccumL)

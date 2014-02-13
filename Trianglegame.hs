@@ -1,7 +1,7 @@
 
 module Trianglegame where
 
-import Gamedata -- everything (especially failing)
+import Types -- everything (especially failing)
 import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages)
 
 import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))

@@ -1,5 +1,5 @@
 
-module Gamedata where
+module Types where
 
 import Data.Map.Strict (Map)
 
