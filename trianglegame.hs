@@ -101,7 +101,6 @@ breakLine = putStrLn "======================================"
 playGame :: Board -> IO Stats
 playGame = playGameWithMoves Both
 
-
 playGameWithMoves :: RightsToMove -> Board -> IO Stats
 playGameWithMoves playersToMove oldBoard =
             do  
@@ -197,8 +196,8 @@ opposingPos w h (initX, initY)
 -- if the inputs were invalid, then a error is reported.
 playMove :: Board -> (Move, Move) -> Failable (Maybe Stats, Board, Action, Action, RightsToMove)
 playMove oldBoard (moveA, moveB) = do
-                                    actionA <- mkAction moveA A oldBoard
-                                    actionB <- mkAction moveB B oldBoard
+                                    actionA <- toAction moveA A oldBoard
+                                    actionB <- toAction moveB B oldBoard
                                     board' <- applyAction actionA oldBoard
                                     board'' <- applyAction actionB board'
                                     let newBoard = increaseTurnCount board''
@@ -209,12 +208,12 @@ playMove oldBoard (moveA, moveB) = do
 rightsFromBoard :: Board -> RightsToMove
 rightsFromBoard = undefined
 
-mkAction :: Move -> Occupation -> Board -> Failable Action
-mkAction mv p board = do 
+toAction :: Move -> Occupation -> Board -> Failable Action
+toAction mv p board = do 
                         from <- fromPos
                         let to = getAdjacentField mv from
                         (actionType, turnsToWait) <- typeAndTurns to
-                        act <- mkAction' actionType turnsToWait from to
+                        act <- mkAction actionType turnsToWait from to
                         return (act)          -- redundant return, but left staying for clarity.
             where
                 fromPos :: Failable Pos
@@ -233,8 +232,13 @@ mkAction mv p board = do
                 getPlayer B b = return (playerB b)
                 getPlayer N _ = failing "Bad argument. Neutral player does not exist."
 ;
-mkAction' :: String -> Int -> Pos -> Pos -> Failable Action
-mkAction' = undefined
+mkAction :: String -> Int -> Pos -> Pos -> Failable Action
+mkAction str wTurns from to
+        | str == "AttackOpponent" = return $ AttackOpponent wTurns from to
+        | str == "VisitFriendly"  = return $ VisitFriendly wTurns from to
+        | str == "ConquerNeutral" = return $ ConquerNeutral wTurns from to
+        | otherwise = failing "Bad action type name."
+;
 
 applyAction :: Action -> Board -> Failable Board
 applyAction = undefined
