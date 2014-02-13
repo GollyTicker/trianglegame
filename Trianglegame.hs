@@ -198,9 +198,10 @@ playMove :: Board -> (Move, Move) -> Failable (Maybe Stats, Board, Action, Actio
 playMove oldBoard (moveA, moveB) = do
                                     actionA <- toAction moveA A oldBoard
                                     actionB <- toAction moveB B oldBoard
-                                    board' <- applyAction actionA oldBoard
-                                    board'' <- applyAction actionB board'
-                                    let newBoard = increaseTurnCount board''
+                                    board1 <- applyAction oldBoard actionA
+                                    board2 <- applyAction board1 actionB
+                                    let board3 = increaseTurnCount board2
+                                        newBoard = decreaseActionTurns board3
                                         rightsToMove = rightsFromBoard newBoard
                                     return (gameStats newBoard, newBoard, actionA, actionB, rightsToMove)
 ;
@@ -208,7 +209,7 @@ playMove oldBoard (moveA, moveB) = do
 rightsFromBoard :: Board -> RightsToMove
 rightsFromBoard = undefined
 
--- TODO test
+-- TODO test -- TODO. check that the player has a running action and therefore got a Nil-move. then just return the action
 toAction :: Move -> Occupation -> Board -> Failable Action
 toAction mv p board = do 
                         from <- fromPos
@@ -243,9 +244,22 @@ mkAction str wTurns from to
         | otherwise = failing "Bad action type name."
 ;
 
-applyAction :: Action -> Board -> Failable Board
-applyAction = undefined
+decreaseActionTurns :: Board -> Board
+decreaseActionTurns = updatePlayerActions (>>=f)
+        where
+            f :: Action -> Maybe Action
+            f act
+                | waitTurns act == 0 = Nothing
+                | otherwise = return act
+;
 
+
+applyAction :: Board -> Action -> Failable Board
+applyAction b (AttackOpponent n from to)
+                        | n == 0 = return $ updateField b (occupiedBy from b) to
+                        | otherwise = return b
+applyAction b (VisitFriendly n from to) = undefined
+applyAction b (ConquerNeutral n from to) = undefined
 
 -- TODO test
 getAdjacentField :: Board -> Move -> Pos -> Failable Pos
@@ -262,13 +276,13 @@ modulate :: Board -> Pos -> Pos
 modulate b (x, y) = (x `mod` width b, y `mod` height b)
 
 
-posOnBoard :: Pos -> Board -> Occupation
-posOnBoard pos b = fields b ! pos
+occupiedBy :: Pos -> Board -> Occupation
+occupiedBy pos b = fields b ! pos
 
 
 neutral, friendly, opposing :: Board -> Occupation -> Pos -> Bool
-neutral b _ pos = posOnBoard pos b == N
-friendly b p pos = posOnBoard pos b == p
+neutral b _ pos = occupiedBy pos b == N
+friendly b p pos = occupiedBy pos b == p
 opposing b p pos = not $ friendly b p pos || neutral b p pos
 
 
@@ -286,13 +300,34 @@ freindly fields.
 
 -}
 
+-- TODO: add case, where the player can interrupt opponents invasion.
+-- we need another Action for that.
+
+
 gameStats :: Board -> Maybe Stats
 gameStats b
         | finalTurns == turnCount b = Just undefined    -- TODO: calculate winner
         | otherwise = Nothing
 ;
 
+
+
+-- This down here looks horrible. It's just basically setters/manipulators.
+-- I've heard of sth. like lenses. But I think it might be overkill to use that.
+-- Or is it not?
+
+updateField :: Board -> Occupation -> Pos -> Board
+updateField b p pos = updateFields (insert pos p) b
+
 increaseTurnCount :: Board -> Board
 increaseTurnCount (Board a b c d e f) = Board a b c d e (f+1)
 
+updateFields :: (Fields -> Fields) -> Board -> Board
+updateFields f (Board a b c d fs e) = Board a b c d (f fs) e
 
+updatePlayerActions :: (Maybe Action -> Maybe Action) -> Board -> Board
+updatePlayerActions f (Board a b p1 p2 c d) = (Board a b p1' p2' c d)
+                where
+                    p1' = Player (pPos p1) (pName p1) (f $ continuedAction p1)
+                    p2' = Player (pPos p2) (pName p2) (f $ continuedAction p2)
+;
