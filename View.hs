@@ -1,12 +1,76 @@
 
-module View (prettyShow) where
+module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages) where
 
-import Gamedata -- everything
+import Gamedata -- everything (especially failing)
 
 import Data.Map.Strict (elems, mapWithKey)
 import Data.List (sortBy, groupBy, intercalate, mapAccumL)
 import Data.Ord (comparing)
 
+
+safeReadMoves :: RightsToMove -> String -> Failable (Move, Move)
+safeReadMoves rights maybeAskedUnsafeMoves = safeRead rights $ prepareInput maybeAskedUnsafeMoves
+
+
+-- removes leading and tailing whitespace
+prepareInput :: String -> String
+prepareInput =  reverse
+                . chomp -- remove tailing whitespace
+                . reverse
+                . chomp -- remove leading whitespace
+; -- remember, the execution order is bottom to top
+
+
+chomp :: String -> String
+chomp = dropWhile (==' ')
+
+safeRead :: RightsToMove -> String -> Failable (Move, Move)
+safeRead Both [p1, ' ', p2] = do 
+                                move1 <- fromChar p1
+                                move2 <- fromChar p2
+                                return (move1, move2)
+;
+safeRead OnlyA [p1] = do 
+                        mv1 <- fromChar p1
+                        return (mv1, Nil)
+;
+safeRead OnlyB [p2] = do 
+                        mv2 <- fromChar p2
+                        return (Nil, mv2)
+;
+safeRead None [] = return (Nil, Nil)
+
+
+safeRead _ ('\"':_) = failing $ moveReadMessages !! 0
+safeRead None _ = failing $ moveReadMessages !! 1
+safeRead OnlyB _ = failing $ moveReadMessages !! 2
+safeRead OnlyA _ = failing $ moveReadMessages !! 3
+safeRead Both _ = failing $ moveReadMessages !! 4
+
+moveReadMessages :: [String]
+moveReadMessages = [
+                    {-0-} "I cannnot understand you. Please ommit the quotes.",
+                    {-1-} "Noone must make a move.",
+                    {-2-} "I cannnot understand you. Please write only R, L or V.",
+                    {-3-} "I cannnot understand you. Please write only R, L or V.",
+                    {-4-} "I cannnot understand you. Please write something like R L, L R, V R, etc...",
+                    {-5-} "Invalid letters. Please use R, L or V."
+                   ]
+;
+
+
+fromChar :: Char -> Failable Move
+fromChar c = case reads [c] of
+                    [(a,_)] -> return a
+                    _ -> failing $ moveReadMessages !! 5
+;
+
+-- =======================================================================================
+displayBoard :: Board -> IO ()
+displayBoard b = do
+                putStrLn "Board:"
+                putStrLn $ prettyShow b
+;
 
 -- quadratic representation of the baords
 -- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char

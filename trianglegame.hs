@@ -1,10 +1,10 @@
 
 module Trianglegame where
 
-import Gamedata -- everything
-import View (prettyShow)
+import Gamedata -- everything (especially failing)
+import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages)
 
-import Test.HUnit (Test(TestList), Assertion, runTestTT, assertEqual, failures, (~:))
+import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))
 import Data.Map.Strict (fromList, insert, size, (!))
 
 
@@ -17,16 +17,10 @@ import Data.Map.Strict (fromList, insert, size, (!))
 -- runs all tests in the console
 rtests :: IO ()
 rtests = do
-        counts <- runTestTT $ TestList unitTests
+        counts <- runTestTT $ "AllTests" ~: tests
         if failures counts /= 0
             then putStrLn ">> Mismatch in tests occurred!"
             else return ()
-;
-
-unitTests :: [Test]
-unitTests = [
-               "tests" ~:  tests
-            ]
 ;
 
 tests :: [Assertion]
@@ -45,7 +39,11 @@ tests = [
                assertEqual "friendly3" False $ friendly testBoard A (3,2),
                assertEqual "opposing1" False $ opposing testBoard A (0,0),
                assertEqual "opposing2" False $ opposing testBoard A (0,1),
-               assertEqual "opposing3" True $ opposing testBoard A (3,2)
+               assertEqual "opposing3" True $ opposing testBoard A (3,2),
+               
+               {- TODO : more tests-}
+               assertEqual "safeReadMoves Both1" (Right (R,R)) $ (safeReadMoves Both "R R"),
+               assertEqual "safeReadMoves Both2" (failing $ moveReadMessages !! 4) $ (safeReadMoves Both "R  R")
             ]
 ;
 
@@ -80,47 +78,84 @@ main = do
         n1 <- getLine
         putStrLn "Second Player Name:"
         n2 <- getLine
-        putStrLn ">> Enter moves as (Player1Move, Player2Move)"
-        putStrLn ">> e.g. (R, V)"
+        breakLine
+        putStrLn $ ">> Enter moves in form of \"" ++ n1 ++ "sMove " ++ n2 ++ "sMove\""
         putStrLn ">> Moves can be to the left (L), right(R) or vertically (V)."
+        putStrLn ">> e.g. \"R V\""
+        putStrLn ">> or \"R\" if only one player may move."
+        breakLine
         putStrLn "Game starts now!"
         let board = mkBoard 6 4 n1 n2
+        displayBoard board
         stats <- playGame board
         putStrLn "Game finished!"
         print stats
 ;
 
+breakLine :: IO ()
+breakLine = putStrLn "======================================"
+
 
 -- keeps taking moves and shows the boards and actions until the game is over
 -- it returns the results of the game when it's finished
-playGame :: Board -> IO Stats   -- TODO: use Faiable here instead of manual error detection
-playGame board =
-            do
-                putStrLn ""
-                putStrLn $ "Turn " ++ show (turnCount board) ++ " - enter your moves:"
-                unsafeMoves <- getLine
-                let moves :: (Move, Move)
-                    moves = read unsafeMoves    -- failable
-                    maybeBoard = playMove board moves   -- failable
-                    Left errStr = maybeBoard
-                    Right (maybeStats, newBoard, p1Action, p2Action) = maybeBoard
-                if isError maybeBoard
-                    then do putStrLn errStr
-                            putStrLn "Try again."
-                            playGame board
-                    else do 
-                            putStrLn $ show (playerA board) ++ " " ++ show p1Action  -- make better Action prints
-                            putStrLn $ show (playerB board) ++ " " ++ show p2Action
-                            putStrLn "Board:"
-                            putStrLn $ prettyShow newBoard
+playGame :: Board -> IO Stats
+playGame = playGameWithMoves Both
+
+
+playGameWithMoves :: RightsToMove -> Board -> IO Stats
+playGameWithMoves playersToMove oldBoard =
+            do  
+                maybeAskedUnsafeMoves <- askForMoves playersToMove oldBoard
+                let maybeBoard :: Failable (Maybe Stats, Board, Action, Action, RightsToMove)
+                            -- its kinda hard/bad to have to change inbetween two monads in such a way....
+                    maybeBoard = do 
+                                    moves <- safeReadMoves playersToMove maybeAskedUnsafeMoves
+                                    afterMove <- playMove oldBoard moves
+                                    return (afterMove)      -- (redundant return)
+                if failed maybeBoard    -- at this point, all the errors are finally catched and are handled.
+                    then tryAgain maybeBoard oldBoard
+                    else continueGame maybeBoard
+;
+failed :: Failable b -> Bool
+failed (Left _) = True
+failed (Right _) = False
+
+continueGame :: Failable (Maybe Stats, Board, Action, Action, RightsToMove) -> IO Stats
+continueGame (Right (maybeStats, newBoard, p1Action, p2Action, nextMoveRights)) = 
+                        do 
+                            putStrLn $ show (playerA newBoard) ++ " " ++ show p1Action  -- make better Action prints
+                            putStrLn $ show (playerB newBoard) ++ " " ++ show p2Action
+                            displayBoard newBoard
                             case maybeStats of
-                                        Nothing -> playGame newBoard
+                                        Nothing -> playGameWithMoves nextMoveRights newBoard
                                         Just stats -> return stats
+continueGame _ = error "Haskell error."
 ;
 
-isError :: Failable b -> Bool
-isError (Left _) = True
-isError (Right _) = False
+tryAgain :: Failable (Maybe Stats, Board, Action, Action, RightsToMove) -> Board -> IO Stats
+tryAgain (Left errStr) oldBoard = do
+                putStrLn errStr
+                putStrLn "Try again."
+                playGame oldBoard
+tryAgain _ _ = error "Haskell error2."
+;
+
+
+askForMoves :: RightsToMove -> Board -> IO String
+askForMoves playersToMove board =
+            do
+                putStrLn ""
+                putStrLn $ "TURN " ++ show (turnCount board) ++ ": " ++ showMoveRights board playersToMove
+                unsafeMoves <- getLine
+                breakLine
+                return unsafeMoves
+;
+
+showMoveRights :: Board -> RightsToMove -> String
+showMoveRights _ Both = "Enter moves for both of you."
+showMoveRights b OnlyA = "Enter the move for " ++ (pName $ playerA b)
+showMoveRights b OnlyB = "Enter the move for " ++ (pName $ playerB b)
+showMoveRights _ None = "Both figures are busy now. Noone may take a move. Press Enter to continue."
 
 -- the initial Pos for Player A
 initPos :: Pos
@@ -160,16 +195,19 @@ opposingPos w h (initX, initY)
 
 -- given two moves, this function makes the moves and returns the actions
 -- if the inputs were invalid, then a error is reported.
--- TODO: sometimes one might not have a move, because one is attacking... add a Void Move?
-playMove :: Board -> (Move, Move) -> Failable (Maybe Stats, Board, Action, Action)
+playMove :: Board -> (Move, Move) -> Failable (Maybe Stats, Board, Action, Action, RightsToMove)
 playMove oldBoard (moveA, moveB) = do
                                     actionA <- mkAction moveA A oldBoard
                                     actionB <- mkAction moveB B oldBoard
                                     board' <- applyAction actionA oldBoard
                                     board'' <- applyAction actionB board'
                                     let newBoard = increaseTurnCount board''
-                                    return (gameStats newBoard, newBoard, actionA, actionB)
+                                        rightsToMove = rightsFromBoard newBoard
+                                    return (gameStats newBoard, newBoard, actionA, actionB, rightsToMove)
 ;
+
+rightsFromBoard :: Board -> RightsToMove
+rightsFromBoard = undefined
 
 mkAction :: Move -> Occupation -> Board -> Failable Action
 mkAction mv p board = do 
@@ -189,11 +227,11 @@ mkAction mv p board = do
                     | neutral board p to = return ("ConquerNeutral", 3)
                     | friendly board p to = return ("VisitFriendly", 1)
                     | opposing board p to = return ("AttackOpponent", 3)
-                    | otherwise = fail "Inconsitency. Detection failure. Target field is neither friendly, opposing nor neutral."
+                    | otherwise = failing "Inconsitency. Detection failure. Target field is neither friendly, opposing nor neutral."
                 getPlayer :: Occupation -> Board -> Failable Player
                 getPlayer A b = return (playerA b)
                 getPlayer B b = return (playerB b)
-                getPlayer N _ = fail "Bad argument. Neutral player does not exist."
+                getPlayer N _ = failing "Bad argument. Neutral player does not exist."
 ;
 mkAction' :: String -> Int -> Pos -> Pos -> Failable Action
 mkAction' = undefined
@@ -235,52 +273,5 @@ gameStats b
 
 increaseTurnCount :: Board -> Board
 increaseTurnCount (Board a b c d e f) = Board a b c d e (f+1)
-
-
--- ======================================================================
-
-{-
-
-Remainder to the usage of Failable as Error Monad. (as Either String)
-
-*Trianglegame> abcd 0
-Left "sorry, its too small"
-
-*Trianglegame> abcd 3
-Right 3
-
-*Trianglegame> abcd 6
-Left "its too large"
-
-*Trianglegame> abcd 0
-Left "sorry, its too small"
-
-*Trianglegame> abcd 4
-Left "I don't like four."
-
--}
-
--- abcd is a function which needs to use multiple functions that can fail.
-abcd :: Integer -> Failable Integer
-abcd n = do 
-            x <- first n
-            y <- second x
-            if y == 4
-                then fail "I don't like four."
-                else return y
-;
-
--- first and second are functions which can fail with an error Message
-first, second :: Integral a => a -> Failable a
-first n
-    | n <= 5 = return n
-    | otherwise = fail "its too large"
-;
-
-second n
-    | n >= 1 = return n
-    | otherwise = fail "sorry, its too small"
-;
-
 
 
