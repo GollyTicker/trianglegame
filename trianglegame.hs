@@ -208,10 +208,11 @@ playMove oldBoard (moveA, moveB) = do
 rightsFromBoard :: Board -> RightsToMove
 rightsFromBoard = undefined
 
+-- TODO test
 toAction :: Move -> Occupation -> Board -> Failable Action
 toAction mv p board = do 
                         from <- fromPos
-                        let to = getAdjacentField mv from
+                        to <- getAdjacentField board mv from
                         (actionType, turnsToWait) <- typeAndTurns to
                         act <- mkAction actionType turnsToWait from to
                         return (act)          -- redundant return, but left staying for clarity.
@@ -232,6 +233,8 @@ toAction mv p board = do
                 getPlayer B b = return (playerB b)
                 getPlayer N _ = failing "Bad argument. Neutral player does not exist."
 ;
+
+
 mkAction :: String -> Int -> Pos -> Pos -> Failable Action
 mkAction str wTurns from to
         | str == "AttackOpponent" = return $ AttackOpponent wTurns from to
@@ -243,11 +246,25 @@ mkAction str wTurns from to
 applyAction :: Action -> Board -> Failable Board
 applyAction = undefined
 
-getAdjacentField :: Move -> Pos -> Pos
-getAdjacentField = undefined
+
+-- TODO test
+getAdjacentField :: Board -> Move -> Pos -> Failable Pos
+getAdjacentField b mv (x,y)
+            | mv == L = return $ modulate b (x-1, y)
+            | mv == R = return $ modulate b (x+1, y)
+            | mv == V = if even (x+y)
+                            then return (x,y-1)
+                            else return (x,y+1)
+            | otherwise = failing $ "Bad move. " ++ show mv ++ " move doesnt have any adjacent field!"
+;
+
+modulate :: Board -> Pos -> Pos
+modulate b (x, y) = (x `mod` width b, y `mod` height b)
+
 
 posOnBoard :: Pos -> Board -> Occupation
 posOnBoard pos b = fields b ! pos
+
 
 neutral, friendly, opposing :: Board -> Occupation -> Pos -> Bool
 neutral b _ pos = posOnBoard pos b == N
