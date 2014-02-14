@@ -1,5 +1,5 @@
 
-module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages) where
+module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths) where
 
 import Types -- everything (especially failing)
 
@@ -66,11 +66,18 @@ fromChar c = case reads [c] of
 ;
 
 -- =======================================================================================
+
+
 displayBoard :: Board -> IO ()
 displayBoard b = do
                 putStrLn "Board:"
                 putStrLn $ prettyShow b
 ;
+
+
+displayPaths :: ((String, Path), (String, Path)) -> IO ()
+displayPaths ((p1Name, path1),(p2Name, path2)) = undefined
+
 
 -- quadratic representation of the baords
 -- an assumption is, that the x and y Positions are numbers from 0 to 9 and therefore need exactly 1 char

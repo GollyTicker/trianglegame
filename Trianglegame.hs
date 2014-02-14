@@ -2,7 +2,7 @@
 module Trianglegame where
 
 import Types -- everything (especially failing)
-import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages)
+import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths)
 
 import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))
 import Data.Map.Strict (fromList, insert, size, (!))
@@ -86,7 +86,7 @@ main = do
         breakLine
         putStrLn "Game starts now!"
         let board = mkBoard 6 4 n1 n2
-        displayBoard board
+        displayGame board
         stats <- playGame board
         putStrLn "Game finished!"
         print stats
@@ -95,6 +95,13 @@ main = do
 breakLine :: IO ()
 breakLine = putStrLn "======================================"
 
+displayGame b = do 
+                    displayBoard b
+                    displayPaths $ getPathsAndPlayerNames $ b
+;
+
+getPathsAndPlayerNames :: Board -> ((String, Path),(String, Path))
+getPathsAndPlayerNames = undefined
 
 -- keeps taking moves and shows the boards and actions until the game is over
 -- it returns the results of the game when it's finished
@@ -124,7 +131,7 @@ continueGame (Right (maybeStats, newBoard, p1Action, p2Action, nextMoveRights)) 
                         do 
                             putStrLn $ show (playerA newBoard) ++ " " ++ show p1Action  -- make better Action prints
                             putStrLn $ show (playerB newBoard) ++ " " ++ show p2Action
-                            displayBoard newBoard
+                            displayGame newBoard
                             case maybeStats of
                                         Nothing -> playGameWithMoves nextMoveRights newBoard
                                         Just stats -> return stats
@@ -167,8 +174,8 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
                           in Board {
                                         width = w,
                                         height = h,
-                                        playerA = Player playerAStart nameA Nothing,
-                                        playerB = Player playerBStart nameB Nothing,
+                                        playerA = Player playerAStart nameA [[playerAStart]] Nothing,
+                                        playerB = Player playerBStart nameB [[playerBStart]] Nothing,
                                         fields = (initialize playerAStart playerBStart $ mkClearFields w h),
                                         turnCount = 0
                                     }
@@ -203,36 +210,41 @@ playMove oldBoard (moveA, moveB) = do
                                     let board3 = increaseTurnCount board2
                                         newBoard = decreaseActionTurns board3
                                         rightsToMove = rightsFromBoard newBoard
-                                    return (gameStats newBoard, newBoard, actionA, actionB, rightsToMove)
+                                    return (isFinished newBoard, newBoard, actionA, actionB, rightsToMove)
 ;
 
 rightsFromBoard :: Board -> RightsToMove
 rightsFromBoard = undefined
 
--- TODO test -- TODO. check that the player has a running action and therefore got a Nil-move. then just return the action
+-- TODO test
 toAction :: Move -> Occupation -> Board -> Failable Action
-toAction mv p board = do 
-                        from <- fromPos
-                        to <- getAdjacentField board mv from
-                        (actionType, turnsToWait) <- typeAndTurns to
-                        act <- mkAction actionType turnsToWait from to
-                        return (act)          -- redundant return, but left staying for clarity.
+toAction mv p board
+            | actionActive && nilMove = return action
+            | not actionActive && not nilMove = do 
+                            (actionType, turnsToWait) <- typeAndTurns to
+                            act <- mkAction actionType turnsToWait from to
+                            return (act)          -- redundant return, but left staying for clarity.
+            | actionActive && not nilMove = failing "Action active, but got a move command."
+            | not actionActive && nilMove = failing "Action inactive, but got a nilMove."
             where
-                fromPos :: Failable Pos
-                fromPos = do 
-                            player <- getPlayer p board
-                            let pos = pPos player
-                            return (pos)
+                from :: Pos
+                from = pPos $ player
+                to :: Pos
+                to = getAdjacentField board mv from
                 typeAndTurns :: Pos -> Failable (String, Int)    
                 typeAndTurns to
                     | neutral board p to = return ("ConquerNeutral", 3)
                     | friendly board p to = return ("VisitFriendly", 1)
                     | opposing board p to = return ("AttackOpponent", 3)
                     | otherwise = failing "Inconsitency. Detection failure. Target field is neither friendly, opposing nor neutral."
-                getPlayer :: Occupation -> Board -> Failable Player
-                getPlayer A b = return (playerA b)
-                getPlayer B b = return (playerB b)
-                getPlayer N _ = failing "Bad argument. Neutral player does not exist."
+                player
+                    | p == A = playerA board
+                    | p == B = playerB board
+                    | otherwise = error "mesa"
+                nilMove = (mv == Nil)
+                mAction = continuedAction player
+                actionActive = not $ mAction == Nothing
+                Just action = mAction
 ;
 
 
@@ -244,6 +256,7 @@ mkAction str wTurns from to
         | otherwise = failing "Bad action type name."
 ;
 
+-- decrease the counter for the turns.
 decreaseActionTurns :: Board -> Board
 decreaseActionTurns = updatePlayerActions (>>=f)
         where
@@ -253,25 +266,34 @@ decreaseActionTurns = updatePlayerActions (>>=f)
                 | otherwise = return act
 ;
 
-
+-- given an aciton. It's being aplied,
+-- if all its turns to go are over.
 applyAction :: Board -> Action -> Failable Board
 applyAction b (AttackOpponent n from to)
                         | n == 0 = return $ updateField b (occupiedBy from b) to
                         | otherwise = return b
-applyAction b (VisitFriendly n from to) = undefined
-applyAction b (ConquerNeutral n from to) = undefined
-
--- TODO test
-getAdjacentField :: Board -> Move -> Pos -> Failable Pos
-getAdjacentField b mv (x,y)
-            | mv == L = return $ modulate b (x-1, y)
-            | mv == R = return $ modulate b (x+1, y)
-            | mv == V = if even (x+y)
-                            then return (x,y-1)
-                            else return (x,y+1)
-            | otherwise = failing $ "Bad move. " ++ show mv ++ " move doesnt have any adjacent field!"
+applyAction b (VisitFriendly n from to) = undefined -- TODO: check if the opponent is attacking this one.
+                                                    -- if so, then terminate the attack and reset boths actions.
+applyAction b (ConquerNeutral n from to)
+                        | n == 0 = return $ updateField b (occupiedBy from b) to
+                        | otherwise = return b
 ;
 
+-- TODO test
+-- For a direction to move and a Position,
+-- this returns the position if moved in that direction.
+-- For vertical movement, if both indices are ood or both are even, then
+-- its the way to top. Else on has to go to bottom. The sum function
+-- does that. The modulate wraps back the odices into legal ranges.
+getAdjacentField :: Board -> Move -> Pos -> Pos
+getAdjacentField b L (x,y) = modulate b (x-1,y)
+getAdjacentField b R (x,y) = modulate b (x+1,y)
+getAdjacentField b V (x,y)
+                    | even (x+y) = modulate b(x,y-1)
+                    | otherwise  = modulate b(x,y+1)
+;
+
+-- makes sure that 0 <= x < width and 0 <= y < height
 modulate :: Board -> Pos -> Pos
 modulate b (x, y) = (x `mod` width b, y `mod` height b)
 
@@ -303,9 +325,8 @@ freindly fields.
 -- TODO: add case, where the player can interrupt opponents invasion.
 -- we need another Action for that.
 
-
-gameStats :: Board -> Maybe Stats
-gameStats b
+isFinished :: Board -> Maybe Stats
+isFinished b
         | finalTurns == turnCount b = Just undefined    -- TODO: calculate winner
         | otherwise = Nothing
 ;

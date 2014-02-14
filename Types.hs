@@ -8,6 +8,8 @@ type Pos = (Int, Int)       -- zero-based indices
 -- short-cut for the Map
 type Fields = Map Pos Occupation
 
+type Path = [Pos]
+
 type Failable a = Either String a
 
 data Board = Board {
@@ -31,11 +33,12 @@ data Occupation = A | B | N deriving (Show, Eq)
 data Player = Player {
                     pPos :: Pos,
                     pName :: String,
+                    paths :: [Path], -- each single-branched path is saved here.
                     continuedAction :: Maybe Action
               } deriving (Show, Eq)
 ;
 
--- currently only holds the winning Player
+
 data Stats = Stats {
                     winner :: Player
                 } deriving Show
