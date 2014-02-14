@@ -312,22 +312,22 @@ gameStats b
 
 
 
--- This down here looks horrible. It's just basically setters/manipulators.
--- I've heard of sth. like lenses. But I think it might be overkill to use that.
--- Or is it not?
+-- setters
 
 updateField :: Board -> Occupation -> Pos -> Board
 updateField b p pos = updateFields (insert pos p) b
 
 increaseTurnCount :: Board -> Board
-increaseTurnCount (Board a b c d e f) = Board a b c d e (f+1)
+increaseTurnCount b = b {turnCount = turnCount b + 1}
 
 updateFields :: (Fields -> Fields) -> Board -> Board
-updateFields f (Board a b c d fs e) = Board a b c d (f fs) e
+updateFields f b = b {fields= f (fields b)}
 
 updatePlayerActions :: (Maybe Action -> Maybe Action) -> Board -> Board
-updatePlayerActions f (Board a b p1 p2 c d) = (Board a b p1' p2' c d)
+updatePlayerActions f b = b {playerA = p1', playerB = p2'}
                 where
-                    p1' = Player (pPos p1) (pName p1) (f $ continuedAction p1)
-                    p2' = Player (pPos p2) (pName p2) (f $ continuedAction p2)
+                    p1 = playerA b
+                    p2 = playerB b
+                    p1' = p1 {continuedAction= f (continuedAction p1)}
+                    p2' = p2 {continuedAction= f (continuedAction p2)}
 ;
