@@ -9,8 +9,10 @@ import Data.Map.Strict as Map (fromList, toList, filterWithKey, insert, size, (!
 import qualified Data.Map.Strict as Map (filter)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
-import Data.Set as Set (Set, fromList, toList, insert, delete)
+import Data.Set as Set (Set, fromList, toList, insert, delete, union, intersection, (\\))
 import Control.Applicative ((<$>), (<*>))
+
+import Debug.Trace (trace)
 
 
 
@@ -58,8 +60,8 @@ tests = [
                                         (Set.fromList [[(0,0), (1,0), (2,0)], [(1,2), (2,2), (3,2)]])
                                         $ paths A
                                         $ insertFields [(0,0), (1,0), (2,0), (1,2), (2,2), (3,2)]
-              ,assertEqual "simple path was interruped by opponent"
-                                        (Set.fromList [[(0,0), (1,0), (2,0)], [(1,2)], [(2,2)], [(3,2)]])
+              ,assertEqual "simple path was crossed by opponent"
+                                        (Set.fromList [[(0,0), (1,0), (2,0)], [(1,2)], [(3,2)]])
                                         $ paths A
                                         $ updateField (2,2) B
                                         $ insertFields [(0,0), (1,0), (2,0), (1,2), (2,2), (3,2)]
@@ -67,18 +69,22 @@ tests = [
                                         (Set.fromList [[(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)]])
                                         $ paths A $ insertFields [(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)] {- fill the first row with A -}
               ,assertEqual "a cycle's fields are only counted once 2"
-                                        (Set.fromList [[(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)]])
+                                        (Set.fromList [[(0,0),(0,3),(1,3),(2,3),(2,0),(1,0)]])
                                         $ paths A
                                         $ insertFields [(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)] {- make a small cycle -}
               ,assertEqual "multiple branched paths should degenerate into simple paths"
                                         (Set.fromList [[(1,0),(2,0)],[(5,0)],[(0,3)]])
                                         $ paths A $ insertFields [(0,0),(1,0),(5,0),(0,3),(2,0)]
-               -- assertEqual "singleton paths"
-               
-               -- test for adjacent.
-               -- if a adjacent to be, then also the reverse is true!
+              ,assertEqual "adjacent a b <-> adjacent b a" True
+                        $ all (\(a, b) -> if (b `elem` adjacent a initialBoard) then (b `elem` adjacent a initialBoard) else True)
+                        $ (\ps -> (,) <$> ps <*> ps)
+                        $ [(x,y)|x <- [0..6-1], y <- [0..4-1]]
             ]
 ;
+
+
+symmDiff :: Ord a => Set a -> Set a -> Set a
+symmDiff a b = (a `union` b) \\ (a `intersection` b)
 
 initialBoard :: Board
 initialBoard = mkBoard 6 4 "Q" "W"
@@ -269,14 +275,14 @@ checkInvariants = undefined
 -- once all there are no more paths to merge,
 -- the remaining set is returned
 paths :: Occupation -> Board -> Set Path
-paths player b = finalPaths
+paths player b = {-trace ("filteredOpposing:" ++ show filteredOpposing)-} finalPaths
         where
             deletedMultipleBranches :: Fields
             deletedMultipleBranches = Map.filterWithKey threeNeighbors $ fields b
             threeNeighbors :: Pos -> Occupation -> Bool
-            threeNeighbors pos occ = 3 == (length $ filter (\x -> occupiedBy x b == occ) $ adjacent pos b)
+            threeNeighbors pos occ = 3 /= (length $ filter (\x -> occupiedBy x b == occ) $ adjacent pos b)
             filteredOpposing :: Fields
-            filteredOpposing = Map.filter (/= player)
+            filteredOpposing = Map.filter (==player)
                                 $ deletedMultipleBranches
             singletonPaths :: Set Path
             singletonPaths = Set.fromList $ map (return . fst) $ Map.toList $ filteredOpposing
@@ -303,8 +309,8 @@ connectable psSet board = maybeConnection
         where
             ps :: [Path]
             ps = Set.toList $ psSet
-            pairs :: [(Path, Path)]
-            pairs = (,) <$> ps <*> ps
+            pairs :: [(Path, Path)] -- excluding the identical path 
+            pairs = filter (\(a,b) -> a /= b) $ (,) <$> ps <*> ps
             connectables :: [(Path, Path)]
             connectables = filter (\(a,b) -> a `connectsTo` b) pairs
             connectsTo :: Path -> Path -> Bool
