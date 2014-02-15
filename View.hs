@@ -78,19 +78,19 @@ displayBoard b = do
 displayPaths :: ((String, Path), (String, Path)) -> IO ()
 displayPaths ((p1Name, path1),(p2Name, path2)) = 
                                 do 
-                                    putStrLn $ p1Name ++ " has:"
+                                    putStrLn $ p1Name ++ " has a longest Path of:"
                                     displayPath path1
                                     putStrLn "and"
-                                    putStrLn $ p2Name ++ " has:"
+                                    putStrLn $ p2Name ++ " has a longest Path of:"
                                     displayPath path2
 
 displayPath :: Path -> IO ()
-displayPath xs = putStrLn $ "(" ++ (intercalate " -> " $ map show $ xs) ++ ")" ++ " of length " ++ show (length xs) ++ "."
+displayPath xs = putStrLn $ "" ++ (intercalate " -> " $ map show $ xs) ++ "" ++ " of length " ++ show (length xs) ++ "."
 
 prettyPrintStats :: Stats -> IO ()
 prettyPrintStats stats = do 
-                                        putStrLn $ "The winner is " ++ winner stats ++ "!" ++ " ...with the path:"
-                                        displayPath (winningPath stats)
+                            putStrLn $ "The winner is " ++ winner stats ++ "!" ++ " ...with the path:"
+                            displayPath (winningPath stats)
 ;
 
 

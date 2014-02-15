@@ -90,13 +90,9 @@ initialBoard :: Board
 initialBoard = mkBoard 6 4 "Q" "W"
 
 -- USEFUL FOR TESTS!
-progressedGame :: Failable Board
-progressedGame = return initialBoard
-                    >>= playMove' (R,R)
-                    >>= playMove' (R,R)
-                    >>= playMove' (R,R)
-                    -- more...
-                    >>= playMove' (R,R)
+progressedGame :: [(Move, Move)] -> Failable Board
+progressedGame [] = return initialBoard
+progressedGame (moves:others) = progressedGame others >>= playMove' moves
 ;
 
 insertFields :: [Pos] -> Board
@@ -262,7 +258,7 @@ Failure Messegaes with "Inconsistency" should NOT blubble up to the player!
 There of the same type and should never arise!
 -}
 checkInvariants :: Board -> Failable Board
-checkInvariants = undefined
+checkInvariants = return    -- TODO
 
 -- returns all the paths for a specific player(given as Occupation)
 -- first, a new Board is made, where all the fields
@@ -275,7 +271,7 @@ checkInvariants = undefined
 -- once all there are no more paths to merge,
 -- the remaining set is returned
 paths :: Occupation -> Board -> Set Path
-paths player b = {-trace ("filteredOpposing:" ++ show filteredOpposing)-} finalPaths
+paths player b = finalPaths
         where
             deletedMultipleBranches :: Fields
             deletedMultipleBranches = Map.filterWithKey threeNeighbors $ fields b
@@ -355,13 +351,14 @@ playMove :: Board -> (Move, Move) -> Failable (Maybe Stats, Board, Action, Actio
 playMove oldBoard (moveA, moveB) = do
                                     actionA <- toAction moveA A oldBoard
                                     actionB <- toAction moveB B oldBoard
-                                    board1 <- applyAction oldBoard actionA
-                                    board2 <- applyAction board1 actionB
-                                    let board3 = increaseTurnCount board2
-                                        newBoard = decreaseActionTurns board3
-                                        rightsToMove = rightsFromBoard newBoard
-                                    safeNewBoard <- checkInvariants newBoard
-                                    return (isFinished safeNewBoard, safeNewBoard, actionA, actionB, rightsToMove)
+                                    let board1 = copyActionsIntoPlayers actionA actionB oldBoard
+                                    board2 <- applyAction board1 actionA
+                                    board3 <- applyAction board2 actionB
+                                    let board4 = increaseTurnCount board3
+                                        board5 = decreaseActionTurns board4
+                                        rightsToMove = rightsFromBoard board5
+                                    newBoard <- checkInvariants board5
+                                    return (isFinished newBoard, newBoard, actionA, actionB, rightsToMove)
 ;
 
 rightsFromBoard :: Board -> RightsToMove
@@ -372,10 +369,15 @@ rightsFromBoard b = case (actionOf A b, actionOf B b) of
                             (Nothing, Nothing) -> Both
 ;
 
+copyActionsIntoPlayers :: Action -> Action -> Board -> Board
+copyActionsIntoPlayers act1 act2 b = 
+                        b {playerA= (playerA b) {continuedAction=return act1}, playerB= (playerB b) {continuedAction=return act2}}
+;
+
 -- TODO test
 toAction :: Move -> Occupation -> Board -> Failable Action
 toAction mv p board
-            | actionActive && nilMove = return action
+            | actionActive && nilMove = return previousAction
             | not actionActive && not nilMove = do 
                                                     act <- mkAction actionType turnsToWait from to
                                                     return (act)          -- redundant return, but left staying for clarity.
@@ -398,8 +400,8 @@ toAction mv p board
                 player = playerByOcc p board
                 nilMove = (mv == Nil)
                 mAction = continuedAction player
-                actionActive = not $ mAction == Nothing
-                Just action = mAction
+                actionActive = not (mAction == Nothing)
+                Just previousAction = mAction
 ;
 
 attacking :: Occupation -> Pos -> Board -> Bool
@@ -435,8 +437,8 @@ decreaseActionTurns = updatePlayerActions (>>=f)
         where
             f :: Action -> Maybe Action
             f act
-                | waitTurns act == 0 = Nothing
-                | otherwise = return act
+                | waitTurns act == 1 = Nothing
+                | otherwise = return (act {waitTurns=waitTurns act-1})
 ;
 
 -- given an aciton. It's being aplied,
@@ -448,11 +450,11 @@ applyAction b act | invalidAction = failing "TODO"
                 invalidAction = undefined
 -}
 applyAction b (AttackOpponent n source target)
-                        | n == 0 = let player = (occupiedBy source b)
+                        | n == 1 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
 applyAction b (VisitFriendly n source target)
-                        | n == 0 = let player = (occupiedBy source b)
+                        | n == 1 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
 applyAction b (DefendField source target) =
@@ -460,7 +462,7 @@ applyAction b (DefendField source target) =
                                    in return $ updatePlayerPosition player target
                                              $ updatePlayerActions (>>Nothing) b -- terminate both actions.
 applyAction b (ConquerNeutral n source target)
-                        | n == 0 = let player = (occupiedBy source b)
+                        | n == 1 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
 ;
