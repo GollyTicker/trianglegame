@@ -68,7 +68,6 @@ data Action =     AttackOpponent {
                         toField :: Pos
                         }
                 | DefendField {
-                        waitTurns :: Int,
                         fromField :: Pos,
                         toField :: Pos
                         }

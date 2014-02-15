@@ -5,7 +5,7 @@ import Types -- everything , especially failing :: String -> Failable a
 import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats)
 
 import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))
-import Data.Map.Strict as Map (fromList, insert, size, (!))
+import Data.Map.Strict as Map (fromList, toList, filter, filterWithKey, insert, size, (!))
 import Data.Ord (comparing)
 import Data.List (maximumBy)
 import Data.Set as Set (Set, fromList, toList)
@@ -240,7 +240,7 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
 {-
 The field both players are standing on are indeed theirs.
 Thats the players cannot move into the same
-field simultanously. (Thats means, that after all the currently runnings acitons a re over,
+field simultanously. (Thats means, that after all the currently runnings acitons are over,
 that both players are an odd number of moves away from each other)
 Also, the Set of Paths is never empty!
 
@@ -262,7 +262,19 @@ checkInvariants = undefined
 -- once all there are no more paths to merge,
 -- the remaining set is returned
 paths :: Occupation -> Board -> Set Path
-paths = undefined
+paths player b = finalPaths
+        where
+            deletedMultipleBranches :: Fields
+            deletedMultipleBranches = Map.filterWithKey threeNeighbors $ fields b
+            threeNeighbors :: Pos -> Occupation -> Bool
+            threeNeighbors pos occ = 3 == length [ x | mv <- [L,R,V], let x = getAdjacentField b mv pos, occupiedBy x b == occ]
+            filteredOpposing :: Fields
+            filteredOpposing = Map.filter (/= player)
+                                $ deletedMultipleBranches
+            singletonPaths :: Set Path
+            singletonPaths = Set.fromList $ map (return . fst) $ Map.toList $ filteredOpposing
+            -- ...
+            finalPaths = undefined    
 
 longestPath :: Occupation -> Board -> Path
 longestPath p b = maximumBy (comparing length) $ Set.toList $ paths p b
@@ -346,7 +358,7 @@ attacking p pos b = case actionOf p b of  Just (AttackOpponent _ _ target) -> ta
 playerByOcc :: Occupation -> Board -> Player
 playerByOcc A b = playerA b
 playerByOcc B b = playerB b
-playerByOcc _ b = error "bendnfmgi"
+playerByOcc _ _ = error "bendnfmgi"
 
 actionOf :: Occupation -> Board -> Maybe Action
 actionOf p b = continuedAction $ playerByOcc p b
@@ -361,7 +373,7 @@ mkAction str wTurns from to
         | str == "AttackOpponent" = return $ AttackOpponent wTurns from to
         | str == "VisitFriendly"  = return $ VisitFriendly wTurns from to
         | str == "ConquerNeutral" = return $ ConquerNeutral wTurns from to
-        | str == "DefendField" = return $ DefendField wTurns from to
+        | str == "DefendField" = return $ DefendField from to
         | otherwise = error "Haskell impossible case 4"
 ;
 
@@ -387,8 +399,14 @@ applyAction b (AttackOpponent n source target)
                         | n == 0 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
-applyAction b (VisitFriendly n source target) = return b
-applyAction b (DefendField n source target) = return $ updatePlayerActions (>>Nothing) b -- terminate both actions.
+applyAction b (VisitFriendly n source target)
+                        | n == 0 = let player = (occupiedBy source b)
+                                   in return $ (player `invades` target) b
+                        | otherwise = return b
+applyAction b (DefendField source target) =
+                                   let player = (occupiedBy source b)
+                                   in return $ updatePlayerPosition player target
+                                             $ updatePlayerActions (>>Nothing) b -- terminate both actions.
 applyAction b (ConquerNeutral n source target)
                         | n == 0 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
@@ -441,9 +459,6 @@ Score of both players is legth of the longest single-branches chain of
 freindly fields.
 
 -}
-
--- TODO: add case, where the player can interrupt opponents invasion.
--- we need another Action for that.
 
 isFinished :: Board -> Maybe Stats
 isFinished b
