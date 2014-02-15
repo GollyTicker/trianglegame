@@ -5,10 +5,12 @@ import Types -- everything , especially failing :: String -> Failable a
 import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats)
 
 import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))
-import Data.Map.Strict as Map (fromList, toList, filter, filterWithKey, insert, size, (!))
+import Data.Map.Strict as Map (fromList, toList, filterWithKey, insert, size, (!))
+import qualified Data.Map.Strict as Map (filter)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
-import Data.Set as Set (Set, fromList, toList)
+import Data.Set as Set (Set, fromList, toList, insert, delete)
+import Control.Applicative ((<$>), (<*>))
 
 
 
@@ -72,6 +74,9 @@ tests = [
                                         (Set.fromList [[(1,0),(2,0)],[(5,0)],[(0,3)]])
                                         $ paths A $ insertFields [(0,0),(1,0),(5,0),(0,3),(2,0)]
                -- assertEqual "singleton paths"
+               
+               -- test for adjacent.
+               -- if a adjacent to be, then also the reverse is true!
             ]
 ;
 
@@ -257,6 +262,8 @@ checkInvariants = undefined
 -- first, a new Board is made, where all the fields
 -- with three neighbors are made neutral.
 -- then it starts. this destroyes paths with multiple branches.
+-- Also, this has the effect, that all fields now have
+-- atmost two adjacent freindly neighbors.
 -- it starts with all singleton fields and
 -- repeatedly merges connected paths
 -- once all there are no more paths to merge,
@@ -267,14 +274,53 @@ paths player b = finalPaths
             deletedMultipleBranches :: Fields
             deletedMultipleBranches = Map.filterWithKey threeNeighbors $ fields b
             threeNeighbors :: Pos -> Occupation -> Bool
-            threeNeighbors pos occ = 3 == length [ x | mv <- [L,R,V], let x = getAdjacentField b mv pos, occupiedBy x b == occ]
+            threeNeighbors pos occ = 3 == (length $ filter (\x -> occupiedBy x b == occ) $ adjacent pos b)
             filteredOpposing :: Fields
             filteredOpposing = Map.filter (/= player)
                                 $ deletedMultipleBranches
             singletonPaths :: Set Path
             singletonPaths = Set.fromList $ map (return . fst) $ Map.toList $ filteredOpposing
-            -- ...
-            finalPaths = undefined    
+            finalPaths = mergeWhileConnected singletonPaths b
+;
+
+mergeWhileConnected :: Set Path -> Board -> Set Path
+mergeWhileConnected ps b = case maybeConnectedPaths ps b of
+                                Just (newPaths) -> mergeWhileConnected newPaths b
+                                Nothing -> ps
+;
+
+maybeConnectedPaths :: Set Path -> Board -> Maybe (Set Path)
+maybeConnectedPaths ps b = do 
+                                (firstPath, secondPath) <- connectable ps b
+                                return $ connect (firstPath, secondPath) ps
+;
+
+adjacent :: Pos -> Board -> [Pos]
+adjacent pos b = [ getAdjacentField b mv pos | mv <- [L,R,V]]
+
+connectable :: Set Path -> Board -> Maybe (Path, Path)
+connectable psSet board = maybeConnection
+        where
+            ps :: [Path]
+            ps = Set.toList $ psSet
+            pairs :: [(Path, Path)]
+            pairs = (,) <$> ps <*> ps
+            connectables :: [(Path, Path)]
+            connectables = filter (\(a,b) -> a `connectsTo` b) pairs
+            connectsTo :: Path -> Path -> Bool
+            fstPath `connectsTo` sndPath = (last fstPath) `elem` adjacent (head sndPath) board
+            maybeConnection :: Maybe (Path, Path)
+            maybeConnection
+                    | null connectables = Nothing
+                    | otherwise = return $ head connectables
+;
+
+connect :: (Path, Path) -> Set Path -> Set Path
+connect (p1, p2) ps =   Set.insert (p1 ++ p2)
+                        . Set.delete p1
+                        . Set.delete p2
+                        $ ps
+;
 
 longestPath :: Occupation -> Board -> Path
 longestPath p b = maximumBy (comparing length) $ Set.toList $ paths p b
@@ -285,7 +331,7 @@ mkClearFields w h = Map.fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 
 -- at the beginng of the game the starting points of player A and B are already in their oppucation
 initialize :: Pos -> Pos -> Fields -> Fields
-initialize startA startB = insert startB B . insert startA A
+initialize startA startB = Map.insert startB B . Map.insert startA A
 
 -- given a starting point for a player, it calculates the most distant
 -- field given the size of the board. this works because of the topology of the game board.
@@ -477,7 +523,7 @@ isFinished b
 -- setters
 
 updateField :: Pos -> Occupation -> Board -> Board
-updateField pos p b = updateFields (insert pos p) b
+updateField pos p b = updateFields (Map.insert pos p) b
 
 increaseTurnCount :: Board -> Board
 increaseTurnCount b = b {turnCount = turnCount b + 1}
