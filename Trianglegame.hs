@@ -5,9 +5,10 @@ import Types -- everything , especially failing :: String -> Failable a
 import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats)
 
 import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))
-import Data.Map.Strict (fromList, insert, size, (!))
+import Data.Map.Strict as Map (fromList, insert, size, (!))
 import Data.Ord (comparing)
 import Data.List (maximumBy)
+import Data.Set as Set (Set, fromList, toList)
 
 
 
@@ -49,15 +50,27 @@ tests = [
                
                
                -- path tests
-              ,assertEqual "paths at beginning" [[initPos]] $ paths A initialBoard
-              ,assertEqual "paths at beginning" [[opposingPos 6 4 initPos]] $ paths B initialBoard
-              ,assertEqual "a cycle's fields are only counted once 1"
-                                        [[(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)]]
-                                        $ paths A $ foldl (\b n -> updateField (n,0) A b) initialBoard [0..5] {- fill the first row with A -}
-              ,assertEqual "a cycle's fields are only counted once 2"
-                                        [[(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)]]
+              ,assertEqual "paths at beginning" (Set.fromList [[initPos]]) $ paths A initialBoard
+              ,assertEqual "paths at beginning" (Set.fromList [[opposingPos 6 4 initPos]]) $ paths B initialBoard
+              ,assertEqual "simple Paths"
+                                        (Set.fromList [[(0,0), (1,0), (2,0)], [(1,2), (2,2), (3,2)]])
                                         $ paths A
-                                        $ foldl (\b pos -> updateField pos A b) initialBoard [(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)] {- make a small cycle -}
+                                        $ insertFields [(0,0), (1,0), (2,0), (1,2), (2,2), (3,2)]
+              ,assertEqual "simple path was interruped by opponent"
+                                        (Set.fromList [[(0,0), (1,0), (2,0)], [(1,2)], [(2,2)], [(3,2)]])
+                                        $ paths A
+                                        $ updateField (2,2) B
+                                        $ insertFields [(0,0), (1,0), (2,0), (1,2), (2,2), (3,2)]
+              ,assertEqual "a cycle's fields are only counted once 1"
+                                        (Set.fromList [[(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)]])
+                                        $ paths A $ insertFields [(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)] {- fill the first row with A -}
+              ,assertEqual "a cycle's fields are only counted once 2"
+                                        (Set.fromList [[(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)]])
+                                        $ paths A
+                                        $ insertFields [(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)] {- make a small cycle -}
+              ,assertEqual "multiple branched paths should degenerate into simple paths"
+                                        (Set.fromList [[(1,0),(2,0)],[(5,0)],[(0,3)]])
+                                        $ paths A $ insertFields [(0,0),(1,0),(5,0),(0,3),(2,0)]
                -- assertEqual "singleton paths"
             ]
 ;
@@ -74,6 +87,9 @@ progressedGame = return initialBoard
                     -- more...
                     >>= playMove' (R,R)
 ;
+
+insertFields :: [Pos] -> Board
+insertFields xs = foldl (\b pos -> updateField pos A b) initialBoard xs
 
 -- a simpler version for making moves for testing purposes.
 playMove' :: (Move, Move) -> Board -> Failable Board
@@ -213,8 +229,8 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
                           in Board {
                                         width = w,
                                         height = h,
-                                        playerA = Player playerAStart nameA Nothing,
-                                        playerB = Player playerBStart nameB Nothing,
+                                        playerA = Player playerAStart nameA Nothing A,
+                                        playerB = Player playerBStart nameB Nothing B,
                                         fields = (initialize playerAStart playerBStart $ mkClearFields w h),
                                         turnCount = 0
                                     }
@@ -226,6 +242,7 @@ The field both players are standing on are indeed theirs.
 Thats the players cannot move into the same
 field simultanously. (Thats means, that after all the currently runnings acitons a re over,
 that both players are an odd number of moves away from each other)
+Also, the Set of Paths is never empty!
 
 These invariants should be always true.
 They are not mistakes by the player, but bugs in the logic.
@@ -236,15 +253,23 @@ There of the same type and should never arise!
 checkInvariants :: Board -> Failable Board
 checkInvariants = undefined
 
-paths :: Occupation -> Board -> [Path]
+-- returns all the paths for a specific player(given as Occupation)
+-- first, a new Board is made, where all the fields
+-- with three neighbors are made neutral.
+-- then it starts. this destroyes paths with multiple branches.
+-- it starts with all singleton fields and
+-- repeatedly merges connected paths
+-- once all there are no more paths to merge,
+-- the remaining set is returned
+paths :: Occupation -> Board -> Set Path
 paths = undefined
 
 longestPath :: Occupation -> Board -> Path
-longestPath p b = maximumBy (comparing length) $ paths p b
+longestPath p b = maximumBy (comparing length) $ Set.toList $ paths p b
 
 -- makes all the neutral fields
 mkClearFields :: Int -> Int -> Fields
-mkClearFields w h = fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
+mkClearFields w h = Map.fromList [ ((x,y), N) | x <- [0..w-1], y <- [0..h-1] ]
 
 -- at the beginng of the game the starting points of player A and B are already in their oppucation
 initialize :: Pos -> Pos -> Fields -> Fields
@@ -276,7 +301,12 @@ playMove oldBoard (moveA, moveB) = do
 ;
 
 rightsFromBoard :: Board -> RightsToMove
-rightsFromBoard = undefined
+rightsFromBoard b = case (actionOf A b, actionOf B b) of
+                            (Just _, Just _) -> None
+                            (Just _, Nothing) -> OnlyB
+                            (Nothing, Just _) -> OnlyA
+                            (Nothing, Nothing) -> Both
+;
 
 -- TODO test
 toAction :: Move -> Occupation -> Board -> Failable Action
@@ -295,25 +325,43 @@ toAction mv p board
                 to = getAdjacentField board mv from
                 (actionType, turnsToWait)
                     | neutral board p to = ("ConquerNeutral", 3)
-                    | friendly board p to = ("VisitFriendly", 1)
+                    | friendly board p to = 
+                                    if ((opponentOf p) `attacking` to) board
+                                        then ("DefendField", 1)
+                                        else ("VisitFriendly", 1)
                     | opposing board p to = ("AttackOpponent", 3)
                     | otherwise = error "Haskell impossible case 3"
-                player
-                    | p == A = playerA board
-                    | p == B = playerB board
-                    | otherwise = error "mesa"
+                player = playerByOcc p board
                 nilMove = (mv == Nil)
                 mAction = continuedAction player
                 actionActive = not $ mAction == Nothing
                 Just action = mAction
 ;
 
+attacking :: Occupation -> Pos -> Board -> Bool
+attacking p pos b = case actionOf p b of  Just (AttackOpponent _ _ target) -> target == pos
+                                          _ -> False
+;
+
+playerByOcc :: Occupation -> Board -> Player
+playerByOcc A b = playerA b
+playerByOcc B b = playerB b
+playerByOcc _ b = error "bendnfmgi"
+
+actionOf :: Occupation -> Board -> Maybe Action
+actionOf p b = continuedAction $ playerByOcc p b
+
+opponentOf :: Occupation -> Occupation
+opponentOf A = B
+opponentOf B = A
+opponentOf N = error "asdasdasd"
 
 mkAction :: String -> Int -> Pos -> Pos -> Failable Action
 mkAction str wTurns from to
         | str == "AttackOpponent" = return $ AttackOpponent wTurns from to
         | str == "VisitFriendly"  = return $ VisitFriendly wTurns from to
         | str == "ConquerNeutral" = return $ ConquerNeutral wTurns from to
+        | str == "DefendField" = return $ DefendField wTurns from to
         | otherwise = error "Haskell impossible case 4"
 ;
 
@@ -330,18 +378,25 @@ decreaseActionTurns = updatePlayerActions (>>=f)
 -- given an aciton. It's being aplied,
 -- if all its turns to go are over.
 applyAction :: Board -> Action -> Failable Board
+{-          -- this maaay get used lateron. but for now, its still Failable.
+applyAction b act | invalidAction = failing "TODO"
+            where
+                invalidAction = undefined
+-}
 applyAction b (AttackOpponent n source target)
-                        | n == 0 = let newOccupation = (occupiedBy source b)
-                                   in return $ updateField target newOccupation b
+                        | n == 0 = let player = (occupiedBy source b)
+                                   in return $ (player `invades` target) b
                         | otherwise = return b
-applyAction b (VisitFriendly n source target) = undefined -- TODO: check if the opponent is attacking this one.
-                                                    -- if so, then terminate the attack and reset boths actions.
+applyAction b (VisitFriendly n source target) = return b
+applyAction b (DefendField n source target) = return $ updatePlayerActions (>>Nothing) b -- terminate both actions.
 applyAction b (ConquerNeutral n source target)
-                        | n == 0 = let newOccupation = (occupiedBy source b)
-                                   in return $ updateField target newOccupation b
+                        | n == 0 = let player = (occupiedBy source b)
+                                   in return $ (player `invades` target) b
                         | otherwise = return b
 ;
 
+invades :: Occupation -> Pos -> Board -> Board
+invades p pos b = updatePlayerPosition p pos $ updateField pos p b
 
 -- TODO test
 -- For a direction to move and a Position,
@@ -355,7 +410,7 @@ getAdjacentField b R (x,y) = modulate b (x+1,y)
 getAdjacentField b V (x,y)
                     | even (x+y) = modulate b(x,y-1)
                     | otherwise  = modulate b(x,y+1)
-getAdjacentField _ Nil _  = error "Game Inconsistency. Make sure the game invariantsa are true."
+getAdjacentField _ Nil _  = error "Game Inconsistency. Make sure the game invariants are true."
 ;
 
 -- makes sure that 0 <= x < width and 0 <= y < height
@@ -422,4 +477,11 @@ updatePlayerActions f b = b {playerA = p1', playerB = p2'}
                     p2 = playerB b
                     p1' = p1 {continuedAction= f (continuedAction p1)}
                     p2' = p2 {continuedAction= f (continuedAction p2)}
+;
+
+updatePlayerPosition :: Occupation -> Pos -> Board -> Board
+updatePlayerPosition p pos b
+                    | p == A = b {playerA = (playerA b) {pPos = pos}}
+                    | p == B = b {playerB = (playerB b) {pPos = pos}}
+                    | otherwise = error "Haskell impossible case 6"
 ;

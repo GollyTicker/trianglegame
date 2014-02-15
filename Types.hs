@@ -33,7 +33,8 @@ data Occupation = A | B | N deriving (Show, Eq)
 data Player = Player {
                     pPos :: Pos,
                     pName :: String,
-                    continuedAction :: Maybe Action
+                    continuedAction :: Maybe Action,
+                    pOccupation :: Occupation   -- this is never Neutral
               } deriving (Show, Eq)
 ;
 
@@ -62,6 +63,11 @@ data Action =     AttackOpponent {
                         toField :: Pos
                         }
                 | ConquerNeutral {
+                        waitTurns :: Int,
+                        fromField :: Pos,
+                        toField :: Pos
+                        }
+                | DefendField {
                         waitTurns :: Int,
                         fromField :: Pos,
                         toField :: Pos
