@@ -1,5 +1,5 @@
 
-module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths) where
+module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats) where
 
 import Types -- everything (especially failing)
 
@@ -76,7 +76,22 @@ displayBoard b = do
 
 
 displayPaths :: ((String, Path), (String, Path)) -> IO ()
-displayPaths ((p1Name, path1),(p2Name, path2)) = undefined
+displayPaths ((p1Name, path1),(p2Name, path2)) = 
+                                do 
+                                    putStrLn $ p1Name ++ " has:"
+                                    displayPath path1
+                                    putStrLn "and"
+                                    putStrLn $ p2Name ++ " has:"
+                                    displayPath path2
+
+displayPath :: Path -> IO ()
+displayPath xs = putStrLn $ "(" ++ (intercalate " -> " $ map show $ xs) ++ ")" ++ " of length " ++ show (length xs) ++ "."
+
+prettyPrintStats :: Stats -> IO ()
+prettyPrintStats stats = do 
+                                        putStrLn $ "The winner is " ++ winner stats ++ "!" ++ " ...with the path:"
+                                        displayPath (winningPath stats)
+;
 
 
 -- quadratic representation of the baords

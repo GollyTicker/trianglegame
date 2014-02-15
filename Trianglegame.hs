@@ -1,15 +1,17 @@
 
 module Trianglegame where
 
-import Types -- everything (especially failing)
-import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths)
+import Types -- everything , especially failing :: String -> Failable a
+import View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats)
 
 import Test.HUnit (Assertion, runTestTT, assertEqual, failures, (~:))
 import Data.Map.Strict (fromList, insert, size, (!))
+import Data.Ord (comparing)
+import Data.List (maximumBy)
 
 
 
-{- Please compile or load using the -Wall flag. Thank you. -}
+{- Please compile or load using the -Wall flag. -}
 
 
 -- ==================================================================================
@@ -25,30 +27,57 @@ rtests = do
 
 tests :: [Assertion]
 tests = [
-               assertEqual "opposingPos1" (5,3) $ opposingPos 6 4 (2,1),
-               assertEqual "opposingPos2" (3,2) $ opposingPos 6 4 (0,0),
+               assertEqual "opposingPos1" (5,3) $ opposingPos 6 4 (2,1)
+              ,assertEqual "opposingPos2" (3,2) $ opposingPos 6 4 (0,0)
                
-               assertEqual "boardSize" (6*4) $ size $ mkClearFields 6 4,
+              ,assertEqual "boardSize" (6*4) $ size $ mkClearFields 6 4
                
-               assertEqual "prettyShow" prettyShowExpected $ prettyShow $ testBoard,
+              ,assertEqual "prettyShow" prettyShowExpected $ prettyShow $ initialBoard
                
-               assertEqual "neutral1" True $ neutral testBoard undefined (0,1),
-               assertEqual "neutral2" False $ neutral testBoard undefined (0,0),
-               assertEqual "friendly1" True $ friendly testBoard A (0,0),
-               assertEqual "friendly2" False $ friendly testBoard A (0,1),
-               assertEqual "friendly3" False $ friendly testBoard A (3,2),
-               assertEqual "opposing1" False $ opposing testBoard A (0,0),
-               assertEqual "opposing2" False $ opposing testBoard A (0,1),
-               assertEqual "opposing3" True $ opposing testBoard A (3,2),
+              ,assertEqual "neutral1" True $ neutral initialBoard undefined (0,1)
+              ,assertEqual "neutral2" False $ neutral initialBoard undefined (0,0)
+              ,assertEqual "friendly1" True $ friendly initialBoard A (0,0)
+              ,assertEqual "friendly2" False $ friendly initialBoard A (0,1)
+              ,assertEqual "friendly3" False $ friendly initialBoard A (3,2)
+              ,assertEqual "opposing1" False $ opposing initialBoard A (0,0)
+              ,assertEqual "opposing2" False $ opposing initialBoard A (0,1)
+              ,assertEqual "opposing3" True $ opposing initialBoard A (3,2)
                
                {- TODO : more tests-}
-               assertEqual "safeReadMoves Both1" (Right (R,R)) $ (safeReadMoves Both "R R"),
-               assertEqual "safeReadMoves Both2" (failing $ moveReadMessages !! 4) $ (safeReadMoves Both "R  R")
+              ,assertEqual "safeReadMoves Both1" (Right (R,R)) $ (safeReadMoves Both "R R")
+              ,assertEqual "safeReadMoves Both2" (failing $ moveReadMessages !! 4) $ (safeReadMoves Both "R  R")
+               
+               
+               -- path tests
+              ,assertEqual "paths at beginning" [[initPos]] $ paths A initialBoard
+              ,assertEqual "paths at beginning" [[opposingPos 6 4 initPos]] $ paths B initialBoard
+              ,assertEqual "a cycle's fields are only counted once 1"
+                                        [[(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)]]
+                                        $ paths A $ foldl (\b n -> updateField (n,0) A b) initialBoard [0..5] {- fill the first row with A -}
+              ,assertEqual "a cycle's fields are only counted once 2"
+                                        [[(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)]]
+                                        $ paths A
+                                        $ foldl (\b pos -> updateField pos A b) initialBoard [(0,0), (1,0), (2,0), (2,3), (1,3), (0,3)] {- make a small cycle -}
+               -- assertEqual "singleton paths"
             ]
 ;
 
-testBoard :: Board
-testBoard = mkBoard 6 4 "Q" "W"
+initialBoard :: Board
+initialBoard = mkBoard 6 4 "Q" "W"
+
+-- USEFUL FOR TESTS!
+progressedGame :: Failable Board
+progressedGame = return initialBoard
+                    >>= playMove' (R,R)
+                    >>= playMove' (R,R)
+                    >>= playMove' (R,R)
+                    -- more...
+                    >>= playMove' (R,R)
+;
+
+-- a simpler version for making moves for testing purposes.
+playMove' :: (Move, Move) -> Board -> Failable Board
+playMove' moves b = playMove b moves >>= (\(_, newBoard, _, _, _) -> return newBoard)
 
 prettyShowExpected :: String
 prettyShowExpected = unlines [
@@ -89,19 +118,24 @@ main = do
         displayGame board
         stats <- playGame board
         putStrLn "Game finished!"
-        print stats
+        breakLine
+        prettyPrintStats stats
 ;
 
 breakLine :: IO ()
 breakLine = putStrLn "======================================"
 
+displayGame :: Board -> IO ()
 displayGame b = do 
                     displayBoard b
                     displayPaths $ getPathsAndPlayerNames $ b
 ;
 
 getPathsAndPlayerNames :: Board -> ((String, Path),(String, Path))
-getPathsAndPlayerNames = undefined
+getPathsAndPlayerNames b = let first  = (pName $ playerA b, longestPath A b)
+                               second = (pName $ playerB b, longestPath B b)
+                           in (first, second)
+;
 
 -- keeps taking moves and shows the boards and actions until the game is over
 -- it returns the results of the game when it's finished
@@ -122,6 +156,7 @@ playGameWithMoves playersToMove oldBoard =
                     then tryAgain maybeBoard oldBoard
                     else continueGame maybeBoard
 ;
+
 failed :: Failable b -> Bool
 failed (Left _) = True
 failed (Right _) = False
@@ -132,10 +167,11 @@ continueGame (Right (maybeStats, newBoard, p1Action, p2Action, nextMoveRights)) 
                             putStrLn $ show (playerA newBoard) ++ " " ++ show p1Action  -- make better Action prints
                             putStrLn $ show (playerB newBoard) ++ " " ++ show p2Action
                             displayGame newBoard
+                            breakLine
                             case maybeStats of
                                         Nothing -> playGameWithMoves nextMoveRights newBoard
                                         Just stats -> return stats
-continueGame _ = error "Haskell error."
+continueGame _ = error "Haskell impossible case 1"
 ;
 
 tryAgain :: Failable (Maybe Stats, Board, Action, Action, RightsToMove) -> Board -> IO Stats
@@ -143,7 +179,7 @@ tryAgain (Left errStr) oldBoard = do
                 putStrLn errStr
                 putStrLn "Try again."
                 playGame oldBoard
-tryAgain _ _ = error "Haskell error2."
+tryAgain _ _ = error "Haskell impossible case 2"
 ;
 
 
@@ -163,6 +199,9 @@ showMoveRights b OnlyA = "Enter the move for " ++ (pName $ playerA b)
 showMoveRights b OnlyB = "Enter the move for " ++ (pName $ playerB b)
 showMoveRights _ None = "Both figures are busy now. Noone may take a move. Press Enter to continue."
 
+
+-- ==========================================================================================
+
 -- the initial Pos for Player A
 initPos :: Pos
 initPos = (0,0)
@@ -174,12 +213,34 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
                           in Board {
                                         width = w,
                                         height = h,
-                                        playerA = Player playerAStart nameA [[playerAStart]] Nothing,
-                                        playerB = Player playerBStart nameB [[playerBStart]] Nothing,
+                                        playerA = Player playerAStart nameA Nothing,
+                                        playerB = Player playerBStart nameB Nothing,
                                         fields = (initialize playerAStart playerBStart $ mkClearFields w h),
                                         turnCount = 0
                                     }
 ;
+
+-- checks that:
+{-
+The field both players are standing on are indeed theirs.
+Thats the players cannot move into the same
+field simultanously. (Thats means, that after all the currently runnings acitons a re over,
+that both players are an odd number of moves away from each other)
+
+These invariants should be always true.
+They are not mistakes by the player, but bugs in the logic.
+
+Failure Messegaes with "Inconsistency" should NOT blubble up to the player!
+There of the same type and should never arise!
+-}
+checkInvariants :: Board -> Failable Board
+checkInvariants = undefined
+
+paths :: Occupation -> Board -> [Path]
+paths = undefined
+
+longestPath :: Occupation -> Board -> Path
+longestPath p b = maximumBy (comparing length) $ paths p b
 
 -- makes all the neutral fields
 mkClearFields :: Int -> Int -> Fields
@@ -210,7 +271,8 @@ playMove oldBoard (moveA, moveB) = do
                                     let board3 = increaseTurnCount board2
                                         newBoard = decreaseActionTurns board3
                                         rightsToMove = rightsFromBoard newBoard
-                                    return (isFinished newBoard, newBoard, actionA, actionB, rightsToMove)
+                                    safeNewBoard <- checkInvariants newBoard
+                                    return (isFinished safeNewBoard, safeNewBoard, actionA, actionB, rightsToMove)
 ;
 
 rightsFromBoard :: Board -> RightsToMove
@@ -221,22 +283,21 @@ toAction :: Move -> Occupation -> Board -> Failable Action
 toAction mv p board
             | actionActive && nilMove = return action
             | not actionActive && not nilMove = do 
-                            (actionType, turnsToWait) <- typeAndTurns to
-                            act <- mkAction actionType turnsToWait from to
-                            return (act)          -- redundant return, but left staying for clarity.
-            | actionActive && not nilMove = failing "Action active, but got a move command."
-            | not actionActive && nilMove = failing "Action inactive, but got a nilMove."
+                                                    act <- mkAction actionType turnsToWait from to
+                                                    return (act)          -- redundant return, but left staying for clarity.
+            | actionActive && not nilMove = failing "Game Inconsistency. Action active, but got a move command."
+            | not actionActive && nilMove = failing "Game Inconsistency. Action inactive, but got a nilMove."
+            | otherwise = error "Haskell impossible case 5"
             where
                 from :: Pos
                 from = pPos $ player
                 to :: Pos
                 to = getAdjacentField board mv from
-                typeAndTurns :: Pos -> Failable (String, Int)    
-                typeAndTurns to
-                    | neutral board p to = return ("ConquerNeutral", 3)
-                    | friendly board p to = return ("VisitFriendly", 1)
-                    | opposing board p to = return ("AttackOpponent", 3)
-                    | otherwise = failing "Inconsitency. Detection failure. Target field is neither friendly, opposing nor neutral."
+                (actionType, turnsToWait)
+                    | neutral board p to = ("ConquerNeutral", 3)
+                    | friendly board p to = ("VisitFriendly", 1)
+                    | opposing board p to = ("AttackOpponent", 3)
+                    | otherwise = error "Haskell impossible case 3"
                 player
                     | p == A = playerA board
                     | p == B = playerB board
@@ -253,7 +314,7 @@ mkAction str wTurns from to
         | str == "AttackOpponent" = return $ AttackOpponent wTurns from to
         | str == "VisitFriendly"  = return $ VisitFriendly wTurns from to
         | str == "ConquerNeutral" = return $ ConquerNeutral wTurns from to
-        | otherwise = failing "Bad action type name."
+        | otherwise = error "Haskell impossible case 4"
 ;
 
 -- decrease the counter for the turns.
@@ -269,15 +330,18 @@ decreaseActionTurns = updatePlayerActions (>>=f)
 -- given an aciton. It's being aplied,
 -- if all its turns to go are over.
 applyAction :: Board -> Action -> Failable Board
-applyAction b (AttackOpponent n from to)
-                        | n == 0 = return $ updateField b (occupiedBy from b) to
+applyAction b (AttackOpponent n source target)
+                        | n == 0 = let newOccupation = (occupiedBy source b)
+                                   in return $ updateField target newOccupation b
                         | otherwise = return b
-applyAction b (VisitFriendly n from to) = undefined -- TODO: check if the opponent is attacking this one.
+applyAction b (VisitFriendly n source target) = undefined -- TODO: check if the opponent is attacking this one.
                                                     -- if so, then terminate the attack and reset boths actions.
-applyAction b (ConquerNeutral n from to)
-                        | n == 0 = return $ updateField b (occupiedBy from b) to
+applyAction b (ConquerNeutral n source target)
+                        | n == 0 = let newOccupation = (occupiedBy source b)
+                                   in return $ updateField target newOccupation b
                         | otherwise = return b
 ;
+
 
 -- TODO test
 -- For a direction to move and a Position,
@@ -291,6 +355,7 @@ getAdjacentField b R (x,y) = modulate b (x+1,y)
 getAdjacentField b V (x,y)
                     | even (x+y) = modulate b(x,y-1)
                     | otherwise  = modulate b(x,y+1)
+getAdjacentField _ Nil _  = error "Game Inconsistency. Make sure the game invariantsa are true."
 ;
 
 -- makes sure that 0 <= x < width and 0 <= y < height
@@ -327,16 +392,22 @@ freindly fields.
 
 isFinished :: Board -> Maybe Stats
 isFinished b
-        | finalTurns == turnCount b = Just undefined    -- TODO: calculate winner
-        | otherwise = Nothing
+            | finalTurns == turnCount b = case length pathA `compare` length pathB of
+                                                LT -> return $ Stats (pName $ playerB b) pathB
+                                                GT -> return $ Stats (pName $ playerB b) pathA
+                                                EQ -> Nothing
+            | otherwise = Nothing
+        where
+            pathA = (longestPath A b)
+            pathB = (longestPath B b)
 ;
 
 
 
 -- setters
 
-updateField :: Board -> Occupation -> Pos -> Board
-updateField b p pos = updateFields (insert pos p) b
+updateField :: Pos -> Occupation -> Board -> Board
+updateField pos p b = updateFields (insert pos p) b
 
 increaseTurnCount :: Board -> Board
 increaseTurnCount b = b {turnCount = turnCount b + 1}

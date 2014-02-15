@@ -19,7 +19,7 @@ data Board = Board {
                 playerB :: Player,
                 fields :: Fields, -- each field is either neutral or As field or Bs field.
                 turnCount :: Int    -- counts the turns already moved on the board
-            }   -- the show for this is defined in Trianglegame.hs
+            }  deriving Show
 ;
 
 -- each field is either neutral or As field or Bs field.
@@ -33,15 +33,15 @@ data Occupation = A | B | N deriving (Show, Eq)
 data Player = Player {
                     pPos :: Pos,
                     pName :: String,
-                    paths :: [Path], -- each single-branched path is saved here.
                     continuedAction :: Maybe Action
               } deriving (Show, Eq)
 ;
 
 
 data Stats = Stats {
-                    winner :: Player
-                } deriving Show
+                    winner :: String,
+                    winningPath :: Path
+                }
 ;
 
 data RightsToMove = Both | OnlyA | OnlyB | None deriving (Show, Eq)
@@ -101,21 +101,21 @@ Left "I don't like four."
 -- abcd is a function which needs to use multiple functions that can failing.
 abcd :: Integer -> Failable Integer
 abcd n = do 
-            x <- first n
-            y <- second x
+            x <- firstUnsafeFunction n
+            y <- secondUnsafeFunction x
             if y == 4
                 then failing "I don't like four."
                 else return y
 ;
 
--- first and second are functions which can failing with an error Message
-first, second :: Integral a => a -> Failable a
-first n
+-- firstUnsafeFunction and secondUnsafeFunction are functions which can failing with an error Message
+firstUnsafeFunction, secondUnsafeFunction :: Integral a => a -> Failable a
+firstUnsafeFunction n
     | n <= 5 = return n
     | otherwise = failing "its too large"
 ;
 
-second n
+secondUnsafeFunction n
     | n >= 1 = return n
     | otherwise = failing "sorry, its too small"
 ;
