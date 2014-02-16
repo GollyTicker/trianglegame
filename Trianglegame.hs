@@ -80,11 +80,24 @@ tests = [
                         $ all (\(a, b) -> if (b `elem` adjacent a initialBoard) then (b `elem` adjacent a initialBoard) else True)
                         $ (\ps -> (,) <$> ps <*> ps)
                         $ [(x,y)|x <- [0..6-1], y <- [0..4-1]]
+              ,assertEqual "simple win" (Right $ [(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)])
+                                        $ 
+                                        (progressedGame 
+                                            $ zip 
+                                                ([R,Nil,Nil,R,Nil,Nil,R,Nil,Nil,R,Nil,Nil,R,Nil,Nil])
+                                                ([V,Nil,Nil] ++ (repeat V)))
+                                                >>= (\b -> return $ longestPath A b)
             ]
 ;
 
 initialBoard :: Board
 initialBoard = mkBoard 6 4 "Q" "W"
+
+trivialMoves :: [(Move, Move)]
+trivialMoves = repeat (V,V)
+
+nn :: (Move,Move)
+nn = (Nil,Nil)
 
 -- USEFUL FOR TESTS!
 progressedGame :: [(Move, Move)] -> Failable Board
