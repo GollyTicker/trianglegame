@@ -9,10 +9,10 @@ import Data.Map.Strict as Map (fromList, toList, filterWithKey, insert, size, (!
 import qualified Data.Map.Strict as Map (filter)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
-import Data.Set as Set (Set, fromList, toList, insert, delete, union, intersection, (\\))
+import Data.Set as Set (Set, fromList, toList, insert, delete)
 import Control.Applicative ((<$>), (<*>))
 
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 
 
 
@@ -75,6 +75,7 @@ tests = [
               ,assertEqual "multiple branched paths should degenerate into simple paths"
                                         (Set.fromList [[(1,0),(2,0)],[(5,0)],[(0,3)]])
                                         $ paths A $ insertFields [(0,0),(1,0),(5,0),(0,3),(2,0)]
+              
               ,assertEqual "adjacent a b <-> adjacent b a" True
                         $ all (\(a, b) -> if (b `elem` adjacent a initialBoard) then (b `elem` adjacent a initialBoard) else True)
                         $ (\ps -> (,) <$> ps <*> ps)
@@ -82,17 +83,12 @@ tests = [
             ]
 ;
 
-
-symmDiff :: Ord a => Set a -> Set a -> Set a
-symmDiff a b = (a `union` b) \\ (a `intersection` b)
-
 initialBoard :: Board
 initialBoard = mkBoard 6 4 "Q" "W"
 
 -- USEFUL FOR TESTS!
 progressedGame :: [(Move, Move)] -> Failable Board
-progressedGame [] = return initialBoard
-progressedGame (moves:others) = progressedGame others >>= playMove' moves
+progressedGame xs = foldl (\b mv -> b >>= playMove' mv)(return initialBoard) xs
 ;
 
 insertFields :: [Pos] -> Board
@@ -187,12 +183,12 @@ failed (Right _) = False
 continueGame :: Failable (Maybe Stats, Board, Action, Action, RightsToMove) -> IO Stats
 continueGame (Right (maybeStats, newBoard, p1Action, p2Action, nextMoveRights)) = 
                         do 
-                            putStrLn $ show (playerA newBoard) ++ " " ++ show p1Action  -- make better Action prints
+                            putStrLn $ show (playerA newBoard) ++ " " ++ show p1Action  -- make better Action and player prints
                             putStrLn $ show (playerB newBoard) ++ " " ++ show p2Action
                             displayGame newBoard
                             breakLine
                             case maybeStats of
-                                        Nothing -> playGameWithMoves nextMoveRights newBoard
+                                        Nothing -> playGameWithMoves nextMoveRights newBoard    -- here is the recursive call.
                                         Just stats -> return stats
 continueGame _ = error "Haskell impossible case 1"
 ;
@@ -205,6 +201,8 @@ tryAgain (Left errStr) oldBoard = do
 tryAgain _ _ = error "Haskell impossible case 2"
 ;
 
+-- TODO:
+-- neighboring opponents cannot attack each others!
 
 askForMoves :: RightsToMove -> Board -> IO String
 askForMoves playersToMove board =
@@ -245,11 +243,11 @@ mkBoard w h nameA nameB = let   playerAStart = initPos
 
 -- checks that:
 {-
-The field both players are standing on are indeed theirs.
-Thats the players cannot move into the same
+The field both players are standing on are indeed theirs. (1)
+Thats the players cannot move into the same (2)
 field simultanously. (Thats means, that after all the currently runnings acitons are over,
 that both players are an odd number of moves away from each other)
-Also, the Set of Paths is never empty!
+Also, the Set of Paths is never empty! (this can not happen, unless the fstInvariant is false.)
 
 These invariants should be always true.
 They are not mistakes by the player, but bugs in the logic.
@@ -258,12 +256,19 @@ Failure Messegaes with "Inconsistency" should NOT blubble up to the player!
 There of the same type and should never arise!
 -}
 checkInvariants :: Board -> Failable Board
-checkInvariants = return    -- TODO
+checkInvariants b
+            | not fstInvariant = failing "Inconsistency. The fields the players are standing on are not theirs."
+            | not sndInvariant = failing "Inconsistency. Players are even numbers of actions away form each other."
+            | otherwise = return b
+        where
+            fstInvariant = occupiedBy (pPos $ playerA b) b == A && occupiedBy (pPos $ playerB b) b == B
+            sndInvariant = True -- TODO 
+;
 
 -- returns all the paths for a specific player(given as Occupation)
 -- first, a new Board is made, where all the fields
 -- with three neighbors are made neutral.
--- then it starts. this destroyes paths with multiple branches.
+-- this destroyes paths with multiple branches.
 -- Also, this has the effect, that all fields now have
 -- atmost two adjacent freindly neighbors.
 -- it starts with all singleton fields and
@@ -379,7 +384,8 @@ toAction :: Move -> Occupation -> Board -> Failable Action
 toAction mv p board
             | actionActive && nilMove = return previousAction
             | not actionActive && not nilMove = do 
-                                                    act <- mkAction actionType turnsToWait from to
+                                                    (actionType, turnsToWait) <- typeAndTurns
+                                                    let act = mkAction actionType turnsToWait from target
                                                     return (act)          -- redundant return, but left staying for clarity.
             | actionActive && not nilMove = failing "Game Inconsistency. Action active, but got a move command."
             | not actionActive && nilMove = failing "Game Inconsistency. Action inactive, but got a nilMove."
@@ -387,21 +393,27 @@ toAction mv p board
             where
                 from :: Pos
                 from = pPos $ player
-                to :: Pos
-                to = getAdjacentField board mv from
-                (actionType, turnsToWait)
-                    | neutral board p to = ("ConquerNeutral", 3)
-                    | friendly board p to = 
-                                    if ((opponentOf p) `attacking` to) board
-                                        then ("DefendField", 1)
-                                        else ("VisitFriendly", 1)
-                    | opposing board p to = ("AttackOpponent", 3)
+                target :: Pos
+                target = getAdjacentField board mv from
+                typeAndTurns :: Failable (String, Int)
+                typeAndTurns
+                    | neutral board p target = return ("ConquerNeutral", 3)
+                    | friendly board p target = 
+                                    if ((opponentOf p) `attacking` target) board
+                                        then return ("DefendField", 1)
+                                        else return ("VisitFriendly", 1)
+                    | opposing board p target = 
+                                    if (opponentOf p) `isCurrentlyStandingOn` target
+                                        then failing $ (pName (player)) ++ " must not attack the opponent, if he/she is already defending the target."
+                                        else return ("AttackOpponent", 3)
                     | otherwise = error "Haskell impossible case 3"
                 player = playerByOcc p board
                 nilMove = (mv == Nil)
-                mAction = continuedAction player
-                actionActive = not (mAction == Nothing)
-                Just previousAction = mAction
+                (previousAction, actionActive) = case continuedAction player of
+                                                        Just prevAct -> (prevAct, True)
+                                                        Nothing -> (undefined, False)
+                isCurrentlyStandingOn :: Occupation -> Pos -> Bool
+                plr `isCurrentlyStandingOn` pos = occupiedBy pos board == plr
 ;
 
 attacking :: Occupation -> Pos -> Board -> Bool
@@ -422,12 +434,12 @@ opponentOf A = B
 opponentOf B = A
 opponentOf N = error "asdasdasd"
 
-mkAction :: String -> Int -> Pos -> Pos -> Failable Action
+mkAction :: String -> Int -> Pos -> Pos -> Action
 mkAction str wTurns from to
-        | str == "AttackOpponent" = return $ AttackOpponent wTurns from to
-        | str == "VisitFriendly"  = return $ VisitFriendly wTurns from to
-        | str == "ConquerNeutral" = return $ ConquerNeutral wTurns from to
-        | str == "DefendField" = return $ DefendField from to
+        | str == "AttackOpponent" = AttackOpponent wTurns from to
+        | str == "VisitFriendly"  = VisitFriendly wTurns from to
+        | str == "ConquerNeutral" = ConquerNeutral wTurns from to
+        | str == "DefendField" = DefendField from to
         | otherwise = error "Haskell impossible case 4"
 ;
 
@@ -516,9 +528,9 @@ freindly fields.
 
 isFinished :: Board -> Maybe Stats
 isFinished b
-            | finalTurns == turnCount b = case length pathA `compare` length pathB of
+            | finalTurns <= turnCount b = case length pathA `compare` length pathB of
                                                 LT -> return $ Stats (pName $ playerB b) pathB
-                                                GT -> return $ Stats (pName $ playerB b) pathA
+                                                GT -> return $ Stats (pName $ playerA b) pathA
                                                 EQ -> Nothing
             | otherwise = Nothing
         where
