@@ -533,11 +533,11 @@ opposing b p pos = not $ friendly b p pos || neutral b p pos
 
 
 finalTurns :: Int
-finalTurns = 31
+finalTurns = 42
 
 {-
 Rules:
-Each time both move to usa  a move.
+Each time both move to use a move.
 A move initiates an 3-turn attack,
 a 1 turn neutral takeover or a 1 turn friendly wander.
 
