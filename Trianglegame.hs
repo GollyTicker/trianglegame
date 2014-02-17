@@ -426,7 +426,7 @@ toAction mv p board
                                                         Just prevAct -> (prevAct, True)
                                                         Nothing -> (undefined, False)
                 isCurrentlyStandingOn :: Occupation -> Pos -> Bool
-                plr `isCurrentlyStandingOn` pos = occupiedBy pos board == plr
+                plr `isCurrentlyStandingOn` pos = pPos (playerByOcc plr board) == pos
 ;
 
 attacking :: Occupation -> Pos -> Board -> Bool
