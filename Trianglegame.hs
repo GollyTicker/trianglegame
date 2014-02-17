@@ -177,11 +177,11 @@ playGame = playGameWithMoves Both
 playGameWithMoves :: RightsToMove -> Board -> IO Stats
 playGameWithMoves playersToMove oldBoard =
             do  
-                maybeAskedUnsafeMoves <- askForMoves playersToMove oldBoard
+                moves <- askForMoves playersToMove oldBoard
                 let maybeBoard :: Failable (Maybe Stats, Board, Action, Action, RightsToMove)
                             -- its kinda hard/bad to have to change inbetween two monads in such a way....
                     maybeBoard = do 
-                                    moves <- safeReadMoves playersToMove maybeAskedUnsafeMoves
+                                    -- moves <- safeReadMoves playersToMove maybeAskedUnsafeMoves
                                     afterMove <- playMove oldBoard moves
                                     return (afterMove)      -- (redundant return)
                 if failed maybeBoard    -- at this point, all the errors are finally catched and are handled.
@@ -214,17 +214,24 @@ tryAgain (Left errStr) oldBoard = do
 tryAgain _ _ = error "Haskell impossible case 2"
 ;
 
--- TODO:
--- neighboring opponents cannot attack each others!
 
-askForMoves :: RightsToMove -> Board -> IO String
+askForMoves :: RightsToMove -> Board -> IO (Move,Move)
 askForMoves playersToMove board =
             do
                 putStrLn ""
                 putStrLn $ "TURN " ++ show (turnCount board) ++ ": " ++ showMoveRights board playersToMove
                 unsafeMoves <- getLine
-                breakLine
-                return unsafeMoves
+                let promptedMoves = safeReadMoves playersToMove unsafeMoves
+                    (Left errMsg) = promptedMoves
+                    (Right moves) = promptedMoves
+                if failed promptedMoves
+                    then do 
+                            putStrLn errMsg
+                            moves <- askForMoves playersToMove board
+                            return moves
+                    else do
+                            breakLine
+                            return moves
 ;
 
 showMoveRights :: Board -> RightsToMove -> String
@@ -541,7 +548,7 @@ freindly fields.
 
 isFinished :: Board -> Maybe Stats
 isFinished b
-            | finalTurns <= turnCount b = case length pathA `compare` length pathB of
+            | finalTurns < turnCount b = case length pathA `compare` length pathB of
                                                 LT -> return $ Stats (pName $ playerB b) pathB
                                                 GT -> return $ Stats (pName $ playerA b) pathA
                                                 EQ -> Nothing
