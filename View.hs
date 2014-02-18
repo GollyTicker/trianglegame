@@ -1,5 +1,5 @@
 
-module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats) where
+module View (displayBoard, prettyShow, safeReadMoves, moveReadMessages, displayPaths, prettyPrintStats, displayPlayerMakingAction) where
 
 import Types -- everything (especially failing)
 
@@ -41,6 +41,9 @@ safeRead OnlyB [p2] = do
 safeRead None [] = return (Nil, Nil)
 
 
+
+
+
 safeRead _ ('\"':_) = failing $ moveReadMessages !! 0
 safeRead None _ = failing $ moveReadMessages !! 1
 safeRead OnlyB _ = failing $ moveReadMessages !! 2
@@ -66,6 +69,32 @@ fromChar c = case reads [c] of
 ;
 
 -- =======================================================================================
+
+displayPlayerMakingAction :: Player -> Action -> IO ()
+displayPlayerMakingAction plr act = do 
+                                        putStrLn $ (pName plr) ++ " " ++ prettyShowAction act
+;
+
+prettyShowAction :: Action -> String
+prettyShowAction (AttackOpponent w _ to)
+                    | w == 3 = "prepares his attack on " ++ show to ++ "."
+                    | w == 2 = "is attacking " ++ show to ++ "!"
+                    | w == 1 = "sieged " ++ show to ++ "!"
+                    | otherwise = "Error. This case shouldn't come."
+;
+
+prettyShowAction (VisitFriendly w _ to)
+                    | w == 1 = "moves to " ++ show to ++ "."
+                    | otherwise = "Error. This case shouldn't come."
+;
+
+prettyShowAction (ConquerNeutral w _ to)
+                    | w == 1 = "takes over " ++ show to ++ "."
+                    | otherwise = "Error. This case shouldn't come."
+;
+
+prettyShowAction (DefendField _ to) = "defends his " ++ show to ++ "!"
+;
 
 
 displayBoard :: Board -> IO ()
