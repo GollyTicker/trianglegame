@@ -62,6 +62,23 @@ tests = [
                                         (Set.fromList [[(1,0),(2,0)],[(5,0)],[(0,3)]])
                                         $ paths A $ insertFields [(0,0),(1,0),(5,0),(0,3),(2,0)]
               
+              ,assertEqual "checkInvariants first"
+                                        (Left "Inconsistency. The fields the players are standing on are not theirs.")
+                                        $ checkInvariants $ insertFields [(3,2)]
+              
+              ,assertEqual "checkInvariants second 1"
+                                        (Left "Inconsistency. Players are not an odd numbers of actions away form each other.")
+                                        $ checkInvariants 
+                                        $ updatePlayerPosition A (1,0) $ insertFields [(1,0)]
+              ,assertEqual "checkInvariants second"
+                                (Left "Inconsistency. Players are not an odd numbers of actions away form each other.")
+                                $ ( do 
+                                        b1 <- ([(R,V)] `playedOn` baseBoard)
+                                        b2 <- return $ updatePlayerActions (>>Nothing) b1
+                                        invalidBoard <- checkInvariants b2
+                                        return invalidBoard
+                                        )
+              
               -- adjacency tests
               ,assertEqual "adjacent a b <-> adjacent b a" True
                         $ all (\(a, b) -> if (b `elem` adjacent a initialBoard) then (b `elem` adjacent a initialBoard) else True)
@@ -72,7 +89,7 @@ tests = [
               ,assertEqual "simple win" (Right $ [(0,0), (1,0), (2,0), (3,0), (4,0), (5,0)])
                                         $ 
                                         (progressedGame $ zip (replicate 5 R) (repeat V))
-                                        >>= (\b -> return $ longestPath A b)
+                                            >>= (\b -> return $ longestPath A b)
               
               ,assertEqual "baseForTests"
                                 (Right $ unlines [
@@ -137,7 +154,9 @@ tests = [
               
               ,assertEqual "blocking an Attack 2. actions are stopped."
                                 (Right (Nothing, Nothing))
-                                $ ([(R,V),(Nil,L)] `playedOn` baseBoard >>= (\b -> return (continuedAction $ playerA b, continuedAction $ playerB b)))
+                                $ ( [(R,V),(Nil,L)] `playedOn` baseBoard
+                                    >>= (\b -> return (continuedAction $ playerA b, continuedAction $ playerB b))
+                                    )
               
               ,assertEqual "continue after blocking an attack."
                                 (Right $ unlines [

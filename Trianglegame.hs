@@ -13,6 +13,9 @@ module Trianglegame (
                     , longestPath
                     , mkBoard
                     , playMove
+                    , checkInvariants
+                    , updatePlayerPosition
+                    , updatePlayerActions
                     , module Types
                     , module View
                     ) where -- export everything for tests
@@ -32,6 +35,9 @@ import Logic (
               , adjacent
               , mkClearFields
               , opposingPos
+              , checkInvariants
+              , updatePlayerPosition
+              , updatePlayerActions
             )
 
 

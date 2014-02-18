@@ -19,7 +19,7 @@ data Board = Board {
                 playerB :: Player,
                 fields :: Fields, -- each field is either neutral or As field or Bs field.
                 turnCount :: Int    -- counts the turns already moved on the board
-            }  deriving Show
+            }  deriving (Show, Eq)
 ;
 
 -- each field is either neutral or As field or Bs field.

@@ -11,6 +11,9 @@ module Logic (
               , adjacent
               , mkClearFields
               , opposingPos
+              , checkInvariants
+              , updatePlayerPosition
+              , updatePlayerActions
             ) where
 
 import Types -- everything , especially failing :: String -> Failable a
@@ -59,17 +62,19 @@ There of the same type and should never arise!
 checkInvariants :: Board -> Failable Board
 checkInvariants board
             | not fstInvariant = failing "Inconsistency. The fields the players are standing on are not theirs."
-            | not sndInvariant = failing "Inconsistency. Players are even numbers of actions away form each other."
+            | not sndInvariant = failing "Inconsistency. Players are not an odd numbers of actions away form each other."
             | otherwise = return board
         where
             fstInvariant = occupiedBy (pPos $ playerA board) board == A && occupiedBy (pPos $ playerB board) board == B
-            sndInvariant = True -- bothEvenOrBothOdd p1Potential p2Potential
+            sndInvariant = oneEvenOneOdd p1Potential p2Potential
             p1 = playerA board
             p2 = playerB board
-            p1Potential = undefined -- sumPos (p1) + 
-            p2Potential = undefined -- sumPos (p1) + 
-            bothEvenOrBothOdd :: Int -> Int -> Bool
-            bothEvenOrBothOdd a b = ((a `mod` 2) + (b `mod` 2)) `mod` 2 == 0
+            p1Action = continuedAction p1
+            p2Action = continuedAction p2
+            p1Potential = sumPos p1 + maybe 0 waitTurns p1Action -- either add that number or zero.
+            p2Potential = sumPos p2 + maybe 0 waitTurns p2Action
+            oneEvenOneOdd :: Int -> Int -> Bool
+            oneEvenOneOdd a b = ((a `mod` 2) + (b `mod` 2)) `mod` 2 == 1
             sumPos :: Player -> Int
             sumPos plr = (\(a,b) -> a + b) (pPos plr)
                             
