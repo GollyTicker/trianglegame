@@ -1,6 +1,6 @@
 trianglegame
 ============
 
-Core Game (90%)
-Ready to Play (15%)
+Core Game (100%)
+Ready to Play (30%)
 
