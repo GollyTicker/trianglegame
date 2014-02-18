@@ -222,16 +222,15 @@ askForMoves playersToMove board =
                 putStrLn $ "TURN " ++ show (turnCount board) ++ ": " ++ showMoveRights board playersToMove
                 unsafeMoves <- getLine
                 let promptedMoves = safeReadMoves playersToMove unsafeMoves
-                    (Left errMsg) = promptedMoves
-                    (Right moves) = promptedMoves
-                if failed promptedMoves
-                    then do 
-                            putStrLn errMsg
-                            moves <- askForMoves playersToMove board
-                            return moves
-                    else do
-                            breakLine
-                            return moves
+                    retryFailed errMsg = do 
+                                            putStrLn errMsg
+                                            moves <- askForMoves playersToMove board
+                                            return moves
+                    acceptSucceded moves = do
+                                        breakLine
+                                        return moves
+                moves <- either retryFailed acceptSucceded promptedMoves
+                return (moves)
 ;
 
 showMoveRights :: Board -> RightsToMove -> String
@@ -417,7 +416,7 @@ toAction mv p board
                 target = getAdjacentField board mv from
                 typeAndTurns :: Failable (String, Int)
                 typeAndTurns
-                    | neutral board p target = return ("ConquerNeutral", 3)
+                    | neutral board p target = return ("ConquerNeutral", 1)
                     | friendly board p target = 
                                     if ((opponentOf p) `attacking` target) board
                                         then return ("DefendField", 1)
