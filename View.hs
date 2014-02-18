@@ -77,19 +77,19 @@ displayPlayerMakingAction plr act = do
 
 prettyShowAction :: Action -> String
 prettyShowAction (AttackOpponent w _ to)
-                    | w == 3 = "prepares his attack on " ++ show to ++ "."
-                    | w == 2 = "is attacking " ++ show to ++ "!"
-                    | w == 1 = "sieged " ++ show to ++ "!"
+                    | w == 2 = "prepares his attack on " ++ show to ++ "."
+                    | w == 1 = "is attacking " ++ show to ++ "!"
+                    | w == 0 = "sieged " ++ show to ++ "!"
                     | otherwise = "Error. This case shouldn't come."
 ;
 
 prettyShowAction (VisitFriendly w _ to)
-                    | w == 1 = "moves to " ++ show to ++ "."
+                    | w == 0 = "moves to " ++ show to ++ "."
                     | otherwise = "Error. This case shouldn't come."
 ;
 
 prettyShowAction (ConquerNeutral w _ to)
-                    | w == 1 = "takes over " ++ show to ++ "."
+                    | w == 0 = "takes over " ++ show to ++ "."
                     | otherwise = "Error. This case shouldn't come."
 ;
 

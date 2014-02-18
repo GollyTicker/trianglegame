@@ -57,13 +57,22 @@ Failure Messegaes with "Inconsistency" should NOT blubble up to the player!
 There of the same type and should never arise!
 -}
 checkInvariants :: Board -> Failable Board
-checkInvariants b
+checkInvariants board
             | not fstInvariant = failing "Inconsistency. The fields the players are standing on are not theirs."
             | not sndInvariant = failing "Inconsistency. Players are even numbers of actions away form each other."
-            | otherwise = return b
+            | otherwise = return board
         where
-            fstInvariant = occupiedBy (pPos $ playerA b) b == A && occupiedBy (pPos $ playerB b) b == B
-            sndInvariant = True -- TODO 
+            fstInvariant = occupiedBy (pPos $ playerA board) board == A && occupiedBy (pPos $ playerB board) board == B
+            sndInvariant = True -- bothEvenOrBothOdd p1Potential p2Potential
+            p1 = playerA board
+            p2 = playerB board
+            p1Potential = undefined -- sumPos (p1) + 
+            p2Potential = undefined -- sumPos (p1) + 
+            bothEvenOrBothOdd :: Int -> Int -> Bool
+            bothEvenOrBothOdd a b = ((a `mod` 2) + (b `mod` 2)) `mod` 2 == 0
+            sumPos :: Player -> Int
+            sumPos plr = (\(a,b) -> a + b) (pPos plr)
+                            
 ;
 
 -- returns all the paths for a specific player(given as Occupation)
@@ -198,15 +207,15 @@ toAction mv p board
                 target = getAdjacentField board mv from
                 typeAndTurns :: Failable (String, Int)
                 typeAndTurns
-                    | neutral board p target = return ("ConquerNeutral", 1)
+                    | neutral board p target = return ("ConquerNeutral", 0)
                     | friendly board p target = 
                                     if ((opponentOf p) `attacking` target) board
-                                        then return ("DefendField", 1)
-                                        else return ("VisitFriendly", 1)
+                                        then return ("DefendField", 0)
+                                        else return ("VisitFriendly", 0)
                     | opposing board p target = 
                                     if (opponentOf p) `isCurrentlyStandingOn` target
                                         then failing $ (pName (player)) ++ " must not attack the opponent, if he/she is already defending the target."
-                                        else return ("AttackOpponent", 3)
+                                        else return ("AttackOpponent", 2)
                     | otherwise = error "Haskell impossible case 3"
                 player = playerByOcc p board
                 nilMove = (mv == Nil)
@@ -250,7 +259,7 @@ decreaseActionTurns = updatePlayerActions (>>=f)
         where
             f :: Action -> Maybe Action
             f act
-                | waitTurns act == 1 = Nothing
+                | waitTurns act == 0 = Nothing
                 | otherwise = return (act {waitTurns=waitTurns act-1})
 ;
 
@@ -263,11 +272,11 @@ applyAction b act | invalidAction = failing "TODO"
                 invalidAction = undefined
 -}
 applyAction b (AttackOpponent n source target)
-                        | n == 1 = let player = (occupiedBy source b)
+                        | n == 0 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
 applyAction b (VisitFriendly n source target)
-                        | n == 1 = let player = (occupiedBy source b)
+                        | n == 0 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
 applyAction b (DefendField source target) =
@@ -275,7 +284,7 @@ applyAction b (DefendField source target) =
                                    in return $ updatePlayerPosition player target
                                              $ updatePlayerActions (>>Nothing) b -- terminate both actions.
 applyAction b (ConquerNeutral n source target)
-                        | n == 1 = let player = (occupiedBy source b)
+                        | n == 0 = let player = (occupiedBy source b)
                                    in return $ (player `invades` target) b
                         | otherwise = return b
 ;
@@ -283,7 +292,7 @@ applyAction b (ConquerNeutral n source target)
 invades :: Occupation -> Pos -> Board -> Board
 invades p pos b = updatePlayerPosition p pos $ updateField pos p b
 
--- TODO test
+
 -- For a direction to move and a Position,
 -- this returns the position if moved in that direction.
 -- For vertical movement, if both indices are ood or both are even, then
